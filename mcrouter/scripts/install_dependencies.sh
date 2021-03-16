@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -ex
+
+[ -n "$1" ] || ( echo "Install dir missing"; exit 1 )
+
+sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+sudo add-apt-repository -y ppa:george-edison55/cmake-3.x
+
+sudo apt-get update
+
+sudo apt-get install -y \
+    autoconf \
+    binutils-dev \
+    bison \
+    cmake \
+    flex \
+    g++ \
+    g++-5 \
+    gcc \
+    git \
+    libboost1.54-all-dev \
+    libdouble-conversion-dev \
+    libevent-dev \
+    libgflags-dev \
+    libgoogle-glog-dev \
+    libjemalloc-dev \
+    libssl-dev \
+    libtool \
+    make \
+    pkg-config \
+    python-dev \
+    ragel \
+    software-properties-common
+
+# sudo apt-get upgrade -yq cmake
