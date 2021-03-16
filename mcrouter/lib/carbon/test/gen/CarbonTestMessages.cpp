@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -55,9 +53,10 @@ void TestRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(29 /* field id */, testSet());
   writer.writeField(30 /* field id */, testOptionalBool());
   writer.writeField(31 /* field id */, testOptionalVec());
+  writer.writeField(32 /* field id */, testIOBufList());
   writer.writeField(100 /* field id */, testType());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -200,6 +199,10 @@ void TestRequest::deserialize(carbon::CarbonProtocolReader& reader) {
         reader.readField(testOptionalVec(), fieldType);
         break;
       }
+      case 32: {
+        reader.readField(testIOBufList(), fieldType);
+        break;
+      }
       case 100: {
         reader.readField(testType(), fieldType);
         break;
@@ -218,8 +221,8 @@ void TestReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, valInt32());
   writer.writeField(3 /* field id */, valInt64());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -261,8 +264,8 @@ void TestRequestStringKey::serialize(
     carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestRequestStringKey::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -293,8 +296,8 @@ void TestRequestStringKey::deserialize(carbon::CarbonProtocolReader& reader) {
 void TestReplyStringKey::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, result());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestReplyStringKey::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -325,8 +328,8 @@ void TestReplyStringKey::deserialize(carbon::CarbonProtocolReader& reader) {
 void TestOptionalBool::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, optionalBool());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestOptionalBool::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -372,8 +375,8 @@ void TestOptionalUnion::serialize(carbon::CarbonProtocolWriter& writer) const {
     default:
       break;
   }
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void TestOptionalUnion::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -408,6 +411,5 @@ void TestOptionalUnion::deserialize(carbon::CarbonProtocolReader& reader) {
   }
   reader.readStructEnd();
 }
-
-} // test
-} // carbon
+} // namespace test
+} // namespace carbon

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2004-present, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -66,8 +64,8 @@ struct SerializationTraits<carbon::test::UserType> {
     writer.writeStructBegin();
     writer.writeField(1 /* field id */, writeType.name);
     writer.writeField(2 /* field id */, writeType.points);
+    writer.writeFieldStop();
     writer.writeStructEnd();
-    writer.writeStop();
   }
 
   static bool isEmpty(const carbon::test::UserType& writeType) {

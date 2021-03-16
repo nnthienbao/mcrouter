@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "mcrouter/lib/Reply.h"
@@ -18,10 +16,10 @@ template <class Request>
 ReplyT<Request> AsyncMcClientImpl::sendSync(
     const Request& request,
     std::chrono::milliseconds timeout,
+    size_t passThroughKey,
     ReplyStatsContext* replyContext) {
-  auto selfPtr = selfPtr_.lock();
-  // shouldn't happen.
-  assert(selfPtr);
+  DestructorGuard dg(this);
+
   assert(folly::fibers::onFiber());
 
   if (maxPending_ != 0 && getPendingRequestCount() >= maxPending_) {
@@ -41,11 +39,11 @@ ReplyT<Request> AsyncMcClientImpl::sendSync(
       request,
       nextMsgId_,
       connectionOptions_.accessPoint->getProtocol(),
-      std::move(selfPtr),
       queue_,
       [](ParserT& parser) { parser.expectNext<Request>(); },
       requestStatusCallbacks_.onStateChange,
-      supportedCompressionCodecs_);
+      supportedCompressionCodecs_,
+      passThroughKey);
   sendCommon(ctx);
 
   // Wait for the reply.

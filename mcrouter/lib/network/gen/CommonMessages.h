@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -61,6 +59,7 @@ class McVersionRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -80,7 +79,7 @@ class McVersionRequest : public carbon::RequestCommon {
   void visitFields(V&& v) const;
 
  private:
-  carbon::Keys<folly::IOBuf> key_;
+  carbon::Keys<folly::IOBuf> key_;  // TODO: Why?
 };
 
 class McVersionReply : public carbon::ReplyCommon {
@@ -171,6 +170,7 @@ class McStatsRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -280,6 +280,7 @@ class McShutdownRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -383,6 +384,7 @@ class McQuitRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -485,6 +487,7 @@ class McExecRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -653,8 +656,7 @@ class GoAwayRequest : public carbon::ReplyCommon {
   std::string reason_;
   carbon::Result result_{mc_res_unknown};
 };
-
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook
 
 #include "CommonMessages-inl.h"

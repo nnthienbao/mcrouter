@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -119,6 +117,9 @@ void TestRequest::visitFields(V&& v) {
   if (!v.visitField(31, "testOptionalVec", testOptionalVec_)) {
     return;
   }
+  if (!v.visitField(32, "testIOBufList", testIOBufList_)) {
+    return;
+  }
   if (!v.visitField(100, "testType", testType_)) {
     return;
   }
@@ -223,6 +224,9 @@ void TestRequest::visitFields(V&& v) const {
     return;
   }
   if (!v.visitField(31, "testOptionalVec", testOptionalVec_)) {
+    return;
+  }
+  if (!v.visitField(32, "testIOBufList", testIOBufList_)) {
     return;
   }
   if (!v.visitField(100, "testType", testType_)) {
@@ -373,6 +377,5 @@ void TestOptionalUnion::foreachMember(V&& v) const {
     return;
   }
 }
-
-} // test
-} // carbon
+} // namespace test
+} // namespace carbon

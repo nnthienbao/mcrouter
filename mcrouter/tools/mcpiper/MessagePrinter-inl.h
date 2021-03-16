@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -78,22 +76,23 @@ constexpr typename std::
 }
 
 template <class Reply>
-typename std::enable_if<
+typename std::enable_if_t<
     !std::is_same<RequestFromReplyType<Reply, RequestReplyPairs>, void>::value,
-    void>::type
+    bool>
 prepareUmbrellaRawReply(
     UmbrellaSerializedMessage& umbrellaSerializedMessage,
     Reply&& reply,
     uint64_t reqid,
     const struct iovec*& iovOut,
     size_t& niovOut) {
-  umbrellaSerializedMessage.prepare(std::move(reply), reqid, iovOut, niovOut);
+  return umbrellaSerializedMessage.prepare(
+      std::move(reply), reqid, iovOut, niovOut);
 }
 
 template <class Reply>
-typename std::enable_if<
+typename std::enable_if_t<
     std::is_same<RequestFromReplyType<Reply, RequestReplyPairs>, void>::value,
-    void>::type
+    bool>
 prepareUmbrellaRawReply(
     UmbrellaSerializedMessage&,
     Reply&&,
@@ -102,6 +101,7 @@ prepareUmbrellaRawReply(
     size_t& /* niovOut */) {
   LOG(ERROR) << "Umbrella Protocol does not support a reply type"
              << " that is not Memcache compatible!";
+  return false;
 }
 
 } // detail
@@ -283,13 +283,11 @@ folly::Optional<StyledString> MessagePrinter::filterAndBuildOutput(
       out.popAppendColor();
     }
   }
-  if (options_.script) {
-    out.append(",\n  \"message\": {");
-    out.append(getTypeSpecificAttributes(message));
-    out.append("\n  }");
-  } else {
-    out.append(getTypeSpecificAttributes(message));
+  auto typeSpecificAttr = getTypeSpecificAttributes(message);
+  if (options_.script && !typeSpecificAttr.empty()) {
+    out.pushBack(',');
   }
+  out.append(typeSpecificAttr);
 
   if (!value.empty()) {
     size_t uncompressedSize;
@@ -367,25 +365,31 @@ void MessagePrinter::printRawReply(
   switch (protocol) {
     case mc_ascii_protocol:
       LOG_FIRST_N(INFO, 1) << "ASCII protocol is not supported for raw data";
-      break;
+      return;
     case mc_umbrella_protocol_DONOTUSE:
-      detail::prepareUmbrellaRawReply(
-          umbrellaSerializedMessage,
-          std::move(reply),
-          msgId,
-          iovsBegin,
-          iovsCount);
+      if (!detail::prepareUmbrellaRawReply(
+              umbrellaSerializedMessage,
+              std::move(reply),
+              msgId,
+              iovsBegin,
+              iovsCount)) {
+        LOG(ERROR) << "Serialization failed for umbrella reply " << msgId;
+        return;
+      }
       break;
     case mc_caret_protocol:
-      caretSerializedMessage.prepare(
-          std::move(reply),
-          msgId,
-          CodecIdRange::Empty,
-          nullptr, /* codec map */
-          0.0, /* drop probability */
-          ServerLoad::zero(),
-          iovsBegin,
-          iovsCount);
+      if (!caretSerializedMessage.prepare(
+              std::move(reply),
+              msgId,
+              CodecIdRange::Empty,
+              nullptr, /* codec map */
+              0.0, /* drop probability */
+              ServerLoad::zero(),
+              iovsBegin,
+              iovsCount)) {
+        LOG(ERROR) << "Serialization failed for caret reply " << msgId;
+        return;
+      }
       break;
     default:
       CHECK(false);
@@ -403,9 +407,14 @@ void MessagePrinter::printRawRequest(
     LOG_FIRST_N(INFO, 1) << "ASCII protocol is not supported for raw data";
     return;
   }
-  McSerializedRequest req(request, msgId, protocol, CodecIdRange::Empty);
 
-  printRawMessage(req.getIovs(), req.getIovsCount());
+  McSerializedRequest req(
+      request, msgId, protocol, CodecIdRange::Empty, /* passThroughKey */ 0);
+  if (req.serializationResult() == McSerializedRequest::Result::OK) {
+    printRawMessage(req.getIovs(), req.getIovsCount());
+  } else {
+    LOG(ERROR) << "Serialization failed for request " << msgId << ".";
+  }
 }
 
 template <class Message>

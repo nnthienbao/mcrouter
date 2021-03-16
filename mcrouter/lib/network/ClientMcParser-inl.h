@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <folly/Format.h>
@@ -275,6 +273,11 @@ void ClientMcParser<Callback>::handleAscii(folly::IOBuf& readBuffer) {
         return;
     }
   }
+}
+
+template <class Callback>
+void ClientMcParser<Callback>::handleBinary(folly::IOBuf& readBuffer) {
+  LOG(ERROR) << "handleBinary() not available to client parser";
 }
 
 template <class Callback>

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ConnectionTracker.h"
@@ -17,7 +15,7 @@ ConnectionTracker::ConnectionTracker(size_t maxConns) : maxConns_(maxConns) {}
 McServerSession& ConnectionTracker::add(
     folly::AsyncTransportWrapper::UniquePtr transport,
     std::shared_ptr<McServerOnRequest> cb,
-    AsyncMcServerWorkerOptions options,
+    const AsyncMcServerWorkerOptions& options,
     void* userCtxt,
     const CompressionCodecMap* compressionCodecMap) {
   if (maxConns_ != 0 && sessions_.size() >= maxConns_) {
@@ -28,7 +26,7 @@ McServerSession& ConnectionTracker::add(
       std::move(transport),
       std::move(cb),
       *this,
-      std::move(options),
+      options,
       userCtxt,
       compressionCodecMap);
 

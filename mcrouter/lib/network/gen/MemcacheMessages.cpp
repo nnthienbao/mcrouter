@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -25,8 +23,8 @@ void McGetRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
   writer.writeField(2 /* field id */, flags());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McGetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -65,8 +63,8 @@ void McGetReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, message());
   writer.writeField(5 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McGetReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -118,8 +116,8 @@ void McSetRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, exptime());
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McSetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -166,8 +164,8 @@ void McSetReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(3 /* field id */, value());
   writer.writeField(4 /* field id */, message());
   writer.writeField(5 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McSetReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -219,8 +217,8 @@ void McDeleteRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, flags());
   writer.writeField(3 /* field id */, exptime());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McDeleteRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -267,8 +265,8 @@ void McDeleteReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(3 /* field id */, value());
   writer.writeField(4 /* field id */, message());
   writer.writeField(5 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McDeleteReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -317,8 +315,9 @@ constexpr const char* const McLeaseGetRequest::name;
 void McLeaseGetRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeField(2 /* field id */, flags());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McLeaseGetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -335,6 +334,10 @@ void McLeaseGetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
     switch (fieldId) {
       case 1: {
         reader.readField(key(), fieldType);
+        break;
+      }
+      case 2: {
+        reader.readField(flags(), fieldType);
         break;
       }
       default: {
@@ -354,8 +357,8 @@ void McLeaseGetReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(4 /* field id */, flags());
   writer.writeField(5 /* field id */, message());
   writer.writeField(6 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McLeaseGetReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -412,8 +415,8 @@ void McLeaseSetRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
   writer.writeField(5 /* field id */, leaseToken());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McLeaseSetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -462,8 +465,8 @@ void McLeaseSetReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McLeaseSetReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -507,8 +510,8 @@ void McAddRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, exptime());
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McAddRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -553,8 +556,8 @@ void McAddReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McAddReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -598,8 +601,8 @@ void McReplaceRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, exptime());
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McReplaceRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -644,8 +647,8 @@ void McReplaceReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McReplaceReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -686,8 +689,8 @@ constexpr const char* const McGetsRequest::name;
 void McGetsRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McGetsRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -723,8 +726,8 @@ void McGetsReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(4 /* field id */, flags());
   writer.writeField(5 /* field id */, message());
   writer.writeField(6 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McGetsReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -781,8 +784,8 @@ void McCasRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
   writer.writeField(5 /* field id */, casToken());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McCasRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -831,8 +834,8 @@ void McCasReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McCasReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -874,8 +877,8 @@ void McIncrRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
   writer.writeField(2 /* field id */, delta());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McIncrRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -913,8 +916,8 @@ void McIncrReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, delta());
   writer.writeField(3 /* field id */, message());
   writer.writeField(4 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McIncrReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -960,8 +963,8 @@ void McDecrRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
   writer.writeField(2 /* field id */, delta());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McDecrRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -999,8 +1002,8 @@ void McDecrReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, delta());
   writer.writeField(3 /* field id */, message());
   writer.writeField(4 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McDecrReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1045,8 +1048,8 @@ constexpr const char* const McMetagetRequest::name;
 void McMetagetRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McMetagetRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1083,8 +1086,8 @@ void McMetagetReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(5 /* field id */, ipAddress());
   writer.writeField(6 /* field id */, message());
   writer.writeField(7 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McMetagetReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1144,8 +1147,8 @@ void McAppendRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, exptime());
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McAppendRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1190,8 +1193,8 @@ void McAppendReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McAppendReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1235,8 +1238,8 @@ void McPrependRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(2 /* field id */, exptime());
   writer.writeField(3 /* field id */, flags());
   writer.writeField(4 /* field id */, value());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McPrependRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1281,8 +1284,8 @@ void McPrependReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McPrependReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1324,8 +1327,8 @@ void McTouchRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
   writer.writeField(2 /* field id */, exptime());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McTouchRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1362,8 +1365,8 @@ void McTouchReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McTouchReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1404,8 +1407,8 @@ constexpr const char* const McFlushReRequest::name;
 void McFlushReRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McFlushReRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1438,8 +1441,8 @@ void McFlushReReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McFlushReReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1481,8 +1484,8 @@ void McFlushAllRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
   writer.writeField(2 /* field id */, delay());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McFlushAllRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1519,8 +1522,8 @@ void McFlushAllReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
   writer.writeField(3 /* field id */, appSpecificErrorCode());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void McFlushAllReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -1555,6 +1558,5 @@ void McFlushAllReply::deserialize(carbon::CarbonProtocolReader& reader) {
   }
   reader.readStructEnd();
 }
-
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook

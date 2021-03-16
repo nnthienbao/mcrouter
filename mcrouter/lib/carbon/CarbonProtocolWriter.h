@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -317,7 +315,7 @@ class CarbonProtocolWriter {
     nestedStructFieldIds_.pop_back();
   }
 
-  void writeStop() {
+  void writeFieldStop() {
     writeByte(FieldType::Stop);
   }
 
@@ -500,8 +498,6 @@ class CarbonProtocolWriter {
       appender_.write(byte);
       val >>= 7;
     }
-    facebook::memcache::checkRuntime(
-        val < 0x80, "writeVarint() called on invalid varint");
     appender_.write(static_cast<uint8_t>(val));
   }
 

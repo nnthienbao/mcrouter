@@ -1,17 +1,11 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ClientSocket.h"
-
-#include <netdb.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 #include <chrono>
 #include <thread>
@@ -25,6 +19,41 @@
 
 namespace facebook {
 namespace memcache {
+
+void ClientSocket::setupSocket(struct addrinfo* res, uint16_t port) {
+  socketFd_ = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  if (socketFd_ < 0) {
+    throwRuntime(
+        "Failed to create a socket for port {}: {}",
+        port,
+        folly::errnoStr(errno));
+  }
+
+  if (::connect(socketFd_, res->ai_addr, res->ai_addrlen) != 0) {
+    auto errStr = folly::errnoStr(errno);
+    ::close(socketFd_);
+    socketFd_ = -1;
+    throwRuntime("Failed to connect to port {}: {}", port, errStr);
+  }
+}
+
+ClientSocket::ClientSocket(const std::string& hostName, uint16_t port) {
+  struct addrinfo hints;
+  struct addrinfo* res;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+
+  auto portStr = folly::to<std::string>(port);
+  auto ret = ::getaddrinfo(hostName.data(), portStr.data(), &hints, &res);
+  checkRuntime(
+      !ret, "Failed to resolve host {}: {}", hostName, ::gai_strerror(ret));
+  SCOPE_EXIT {
+    ::freeaddrinfo(res);
+  };
+  setupSocket(res, port);
+}
 
 ClientSocket::ClientSocket(uint16_t port) {
   struct addrinfo hints;
@@ -40,19 +69,7 @@ ClientSocket::ClientSocket(uint16_t port) {
   SCOPE_EXIT {
     ::freeaddrinfo(res);
   };
-  socketFd_ = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-  if (socketFd_ < 0) {
-    throwRuntime(
-        "Failed to create a socket for port {}: {}",
-        port,
-        folly::errnoStr(errno));
-  }
-
-  if (::connect(socketFd_, res->ai_addr, res->ai_addrlen) != 0) {
-    auto errStr = folly::errnoStr(errno);
-    ::close(socketFd_);
-    throwRuntime("Failed to connect to port {}: {}", port, errStr);
-  }
+  setupSocket(res, port);
 }
 
 ClientSocket::ClientSocket(ClientSocket&& other) noexcept
@@ -163,5 +180,5 @@ std::string ClientSocket::sendRequest(
   return std::string(replyBuf.data(), n);
 }
 
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook

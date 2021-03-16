@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "TestClientServerUtil.h"
@@ -27,16 +25,18 @@
 #include "mcrouter/lib/network/AsyncMcClient.h"
 #include "mcrouter/lib/network/AsyncMcServer.h"
 #include "mcrouter/lib/network/AsyncMcServerWorker.h"
+#include "mcrouter/lib/network/ReplyStatsContext.h"
+#include "mcrouter/lib/network/SecurityMech.h"
 #include "mcrouter/lib/network/ThreadLocalSSLContextProvider.h"
 #include "mcrouter/lib/network/test/ListenSocket.h"
+
+namespace folly {
+class AsyncSocket;
+} // namespace folly
 
 namespace facebook {
 namespace memcache {
 namespace test {
-
-const char* const kPemCaPath = "mcrouter/lib/network/test/ca_cert.pem";
-const char* const kValidKeyPath = "mcrouter/lib/network/test/test_key.pem";
-const char* const kValidCertPath = "mcrouter/lib/network/test/test_cert.pem";
 
 const char* const kBrokenKeyPath = "mcrouter/lib/network/test/broken_key.pem";
 const char* const kBrokenCertPath = "mcrouter/lib/network/test/broken_cert.pem";
@@ -46,21 +46,26 @@ const char* const kInvalidCertPath = "/do/not/exist";
 
 const char* const kServerVersion = "TestServer-1.0";
 
-SSLContextProvider validSsl() {
-  return
-      []() { return getSSLContext(kValidCertPath, kValidKeyPath, kPemCaPath); };
+SSLTestPaths validClientSsl() {
+  return {getDefaultCertPath(), getDefaultKeyPath(), getDefaultCaPath()};
 }
 
-SSLContextProvider invalidSsl() {
-  return []() {
-    return getSSLContext(kInvalidCertPath, kInvalidKeyPath, kPemCaPath);
-  };
+SSLTestPaths invalidClientSsl() {
+  return {kInvalidCertPath, kInvalidKeyPath, getDefaultCaPath()};
 }
 
-SSLContextProvider brokenSsl() {
-  return []() {
-    return getSSLContext(kBrokenCertPath, kBrokenKeyPath, kPemCaPath);
-  };
+SSLTestPaths brokenClientSsl() {
+  return {kBrokenCertPath, kBrokenKeyPath, getDefaultCaPath()};
+}
+
+SSLTestPaths noCertClientSsl() {
+  return {"", "", ""};
+}
+
+SSLTestPaths validSsl() {
+  // valid client creds will work for the server
+  // as well
+  return validClientSsl();
 }
 
 TestServerOnRequest::TestServerOnRequest(
@@ -136,28 +141,26 @@ void TestServerOnRequest::flushQueue() {
   waitingReplies_.clear();
 }
 
-TestServer::TestServer(
-    bool outOfOrder,
-    bool useSsl,
-    int maxInflight,
-    int timeoutMs,
-    size_t maxConns,
-    bool useDefaultVersion,
-    size_t numThreads,
-    bool useTicketKeySeeds,
-    size_t goAwayTimeoutMs)
-    : outOfOrder_(outOfOrder), useTicketKeySeeds_(useSsl && useTicketKeySeeds) {
+TestServer::TestServer(Config config)
+    : outOfOrder_(config.outOfOrder),
+      useTicketKeySeeds_(config.useSsl && config.useTicketKeySeeds) {
   opts_.existingSocketFd = sock_.getSocketFd();
-  opts_.numThreads = numThreads;
-  opts_.worker.defaultVersionHandler = useDefaultVersion;
-  opts_.worker.maxInFlight = maxInflight;
-  opts_.worker.sendTimeout = std::chrono::milliseconds{timeoutMs};
-  opts_.worker.goAwayTimeout = std::chrono::milliseconds{goAwayTimeoutMs};
-  opts_.setPerThreadMaxConns(maxConns, opts_.numThreads);
-  if (useSsl) {
-    opts_.pemKeyPath = kValidKeyPath;
-    opts_.pemCertPath = kValidCertPath;
-    opts_.pemCaPath = kPemCaPath;
+  opts_.numThreads = config.numThreads;
+  opts_.worker.defaultVersionHandler = config.useDefaultVersion;
+  opts_.worker.maxInFlight = config.maxInflight;
+  opts_.worker.sendTimeout = std::chrono::milliseconds{config.timeoutMs};
+  opts_.worker.goAwayTimeout =
+      std::chrono::milliseconds{config.goAwayTimeoutMs};
+  opts_.setPerThreadMaxConns(config.maxConns, opts_.numThreads);
+  if (config.useSsl) {
+    opts_.pemKeyPath = config.keyPath;
+    opts_.pemCertPath = config.certPath;
+    opts_.pemCaPath = config.caPath;
+    opts_.sslRequirePeerCerts = config.requirePeerCerts;
+    if (config.tfoEnabled) {
+      opts_.tfoEnabledForSsl = true;
+      opts_.tfoQueueSize = 100000;
+    }
   }
 }
 
@@ -198,6 +201,11 @@ void TestServer::run(std::function<void(AsyncMcServerWorker&)> init) {
   startupLock.wait();
 }
 
+TestServer::~TestServer() {
+  shutdown();
+  join();
+}
+
 std::string TestServer::version() const {
   if (opts_.worker.defaultVersionHandler) {
     return opts_.worker.versionString;
@@ -211,17 +219,28 @@ TestClient::TestClient(
     uint16_t port,
     int timeoutMs,
     mc_protocol_t protocol,
-    SSLContextProvider ssl,
+    folly::Optional<SSLTestPaths> ssl,
     uint64_t qosClass,
-    uint64_t qosPath)
+    uint64_t qosPath,
+    std::string serviceIdentity,
+    const CompressionCodecMap* compressionCodecMap,
+    bool enableTfo,
+    bool offloadHandshakes)
     : fm_(std::make_unique<folly::fibers::EventBaseLoopController>()) {
   dynamic_cast<folly::fibers::EventBaseLoopController&>(fm_.loopController())
       .attachEventBase(eventBase_);
   ConnectionOptions opts(host, port, protocol);
   opts.writeTimeout = std::chrono::milliseconds(timeoutMs);
+  opts.compressionCodecMap = compressionCodecMap;
   if (ssl) {
-    opts.sslContextProvider = std::move(ssl);
+    opts.securityMech = SecurityMech::TLS;
+    opts.sslPemCertPath = ssl->sslCertPath;
+    opts.sslPemKeyPath = ssl->sslKeyPath;
+    opts.sslPemCaPath = ssl->sslCaPath;
     opts.sessionCachingEnabled = true;
+    opts.sslServiceIdentity = serviceIdentity;
+    opts.tfoEnabledForSsl = enableTfo;
+    opts.sslHandshakeOffload = offloadHandshakes;
   }
   if (qosClass != 0 || qosPath != 0) {
     opts.enableQoS = true;
@@ -230,7 +249,7 @@ TestClient::TestClient(
   }
   client_ = std::make_unique<AsyncMcClient>(eventBase_, opts);
   client_->setStatusCallbacks(
-      [] { LOG(INFO) << "Client UP."; },
+      [](const folly::AsyncTransportWrapper&) { LOG(INFO) << "Client UP."; },
       [](AsyncMcClient::ConnectionDownReason reason) {
         if (reason == AsyncMcClient::ConnectionDownReason::SERVER_GONE_AWAY) {
           LOG(INFO) << "Server gone Away.";
@@ -256,12 +275,12 @@ TestClient::TestClient(
 }
 
 void TestClient::setStatusCallbacks(
-    std::function<void()> onUp,
+    std::function<void(const folly::AsyncTransportWrapper&)> onUp,
     std::function<void(AsyncMcClient::ConnectionDownReason)> onDown) {
   client_->setStatusCallbacks(
-      [onUp] {
+      [onUp](const folly::AsyncTransportWrapper& socket) {
         LOG(INFO) << "Client UP.";
-        onUp();
+        onUp(socket);
       },
       [onDown](AsyncMcClient::ConnectionDownReason reason) {
         if (reason == AsyncMcClient::ConnectionDownReason::SERVER_GONE_AWAY) {
@@ -276,16 +295,29 @@ void TestClient::setStatusCallbacks(
 void TestClient::sendGet(
     std::string key,
     mc_res_t expectedResult,
-    uint32_t timeoutMs) {
+    uint32_t timeoutMs,
+    std::function<void(const ReplyStatsContext&)> replyStatsCallback) {
   inflight_++;
-  fm_.addTask([ key = std::move(key), expectedResult, this, timeoutMs ]() {
+  fm_.addTask([
+    key = std::move(key),
+    expectedResult,
+    replyStatsCallback = std::move(replyStatsCallback),
+    this,
+    timeoutMs
+  ]() {
     McGetRequest req(key);
     if (req.key().fullKey() == "trace_id") {
       req.setTraceId({12345, 67890});
     }
 
     try {
-      auto reply = client_->sendSync(req, std::chrono::milliseconds(timeoutMs));
+      ReplyStatsContext replyStatsContext;
+      auto reply = client_->sendSync(
+          req, std::chrono::milliseconds(timeoutMs), &replyStatsContext);
+      if (replyStatsCallback) {
+        replyStatsCallback(replyStatsContext);
+      }
+
       if (reply.result() == mc_res_found) {
         auto value = carbon::valueRangeSlow(reply);
         if (req.key().fullKey() == "empty") {
@@ -315,9 +347,10 @@ void TestClient::sendGet(
       }
       checkLogic(
           expectedResult == reply.result(),
-          "Expected {}, got {}",
+          "Expected {}, got {} for key '{}'",
           mc_res_to_string(expectedResult),
-          mc_res_to_string(reply.result()));
+          mc_res_to_string(reply.result()),
+          req.key().fullKey());
     } catch (const std::exception& e) {
       CHECK(false) << "Failed: " << e.what();
     }
@@ -328,18 +361,25 @@ void TestClient::sendGet(
 void TestClient::sendSet(
     std::string key,
     std::string value,
-    mc_res_t expectedResult) {
+    mc_res_t expectedResult,
+    uint32_t timeoutMs,
+    std::function<void(const ReplyStatsContext&)> replyStatsCallback) {
   inflight_++;
-  fm_.addTask([
-    key = std::move(key),
-    value = std::move(value),
-    expectedResult,
-    this
-  ]() {
+  fm_.addTask([key = std::move(key),
+               value = std::move(value),
+               expectedResult,
+               replyStatsCallback = std::move(replyStatsCallback),
+               this,
+               timeoutMs]() {
     McSetRequest req(key);
     req.value() = folly::IOBuf::wrapBufferAsValue(folly::StringPiece(value));
 
-    auto reply = client_->sendSync(req, std::chrono::milliseconds(200));
+    ReplyStatsContext replyStatsContext;
+    auto reply = client_->sendSync(
+        req, std::chrono::milliseconds(timeoutMs), &replyStatsContext);
+    if (replyStatsCallback) {
+      replyStatsCallback(replyStatsContext);
+    }
 
     CHECK(expectedResult == reply.result())
         << "Expected: " << mc_res_to_string(expectedResult) << " got "

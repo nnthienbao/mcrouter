@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -13,12 +11,18 @@
 #include <memory>
 #include <unordered_map>
 
+#include <folly/Synchronized.h>
+#include <folly/container/EvictingCacheMap.h>
+#include <folly/experimental/FunctionScheduler.h>
 #include <folly/experimental/ReadMostlySharedPtr.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/io/async/EventBaseThread.h>
+#include <folly/synchronization/CallOnce.h>
 
 #include "mcrouter/ConfigApi.h"
 #include "mcrouter/LeaseTokenMap.h"
 #include "mcrouter/Observable.h"
+#include "mcrouter/PoolStats.h"
 #include "mcrouter/TkoTracker.h"
 #include "mcrouter/options.h"
 
@@ -39,6 +43,10 @@ class Proxy;
 class RuntimeVarsData;
 using ObservableRuntimeVars =
     Observable<std::shared_ptr<const RuntimeVarsData>>;
+
+using ShadowLeaseTokenMap = folly::Synchronized<
+    folly::EvictingCacheMap<int64_t, int64_t>,
+    folly::fibers::TimedMutex>;
 
 class CarbonRouterInstanceBase {
  public:
@@ -81,10 +89,23 @@ class CarbonRouterInstanceBase {
     return rtVarsData_;
   }
 
+  /**
+   * Returns an AsyncWriter for stats related purposes.
+   */
   folly::ReadMostlySharedPtr<AsyncWriter> statsLogWriter();
 
   LeaseTokenMap& leaseTokenMap() {
-    return *leaseTokenMap_;
+    return leaseTokenMap_;
+  }
+
+  ShadowLeaseTokenMap& shadowLeaseTokenMap() {
+    using UnsynchronizedMap = typename ShadowLeaseTokenMap::DataType;
+
+    folly::call_once(shadowLeaseTokenMapInitFlag_, [this]() {
+      shadowLeaseTokenMap_ = std::make_unique<ShadowLeaseTokenMap>(
+          UnsynchronizedMap{opts().max_shadow_token_map_size});
+    });
+    return *shadowLeaseTokenMap_;
   }
 
   const LogPostprocessCallbackFunc& postprocessCallback() const {
@@ -95,10 +116,11 @@ class CarbonRouterInstanceBase {
     postprocessCallback_ = std::move(newCallback);
   }
 
-  AsyncWriter& asyncWriter() {
-    assert(asyncWriter_.get() != nullptr);
-    return *asyncWriter_;
-  }
+  /**
+   * Returns an AsyncWriter for mission critical work (use statsLogWriter() for
+   * auxiliary / low priority work).
+   */
+  folly::ReadMostlySharedPtr<AsyncWriter> asyncWriter();
 
   std::unordered_map<std::string, std::string> getStartupOpts() const;
   void addStartupOpts(
@@ -125,6 +147,23 @@ class CarbonRouterInstanceBase {
   }
 
   /**
+   * This function finds the index of poolName in the statsEnabledPools_
+   * sorted array by doing binary search. If exact match is not found,
+   * index with maximum prefix match is returned.
+   *
+   * @return index of the pool in the statsEnabledPools_ vector
+   *         -1 if not found
+   */
+  int32_t getStatsEnabledPoolIndex(folly::StringPiece poolName) const;
+
+  /**
+   * @return  reference to the statsEnabledPools_ vector
+   */
+  const std::vector<std::string>& getStatsEnabledPools() const {
+    return statsEnabledPools_;
+  }
+
+  /**
    * @return  nullptr if index is >= opts.num_proxies,
    *          pointer to the proxy otherwise.
    */
@@ -134,6 +173,12 @@ class CarbonRouterInstanceBase {
    * Bump and return the index of the next proxy to be used by clients.
    */
   size_t nextProxyIndex();
+
+  /**
+   * Returns a FunctionScheduler suitable for running periodic background tasks
+   * on. Null may be returned if the global instance has been destroyed.
+   */
+  std::shared_ptr<folly::FunctionScheduler> functionScheduler();
 
  protected:
   /**
@@ -149,14 +194,6 @@ class CarbonRouterInstanceBase {
   const McrouterOptions opts_;
   const pid_t pid_;
   const std::unique_ptr<ConfigApi> configApi_;
-
-  /*
-   * Asynchronous writer.
-   */
-  const std::unique_ptr<AsyncWriter> asyncWriter_;
-
-  // Auxiliary EventBase thread.
-  folly::EventBaseThread evbAuxiliaryThread_;
 
   LogPostprocessCallbackFunc postprocessCallback_;
 
@@ -187,7 +224,12 @@ class CarbonRouterInstanceBase {
   const std::shared_ptr<ObservableRuntimeVars> rtVarsData_;
 
   // Keep track of lease tokens of failed over requests.
-  const std::unique_ptr<LeaseTokenMap> leaseTokenMap_;
+  LeaseTokenMap leaseTokenMap_;
+
+  // In order to shadow lease-sets properly, we need to pass the correct token
+  // to the shadow destination.
+  std::unique_ptr<ShadowLeaseTokenMap> shadowLeaseTokenMap_;
+  folly::once_flag shadowLeaseTokenMapInitFlag_;
 
   std::unordered_map<std::string, std::string> additionalStartupOpts_;
 
@@ -197,8 +239,13 @@ class CarbonRouterInstanceBase {
   // Current stats index. Only accessed / updated  by stats background thread.
   size_t statsIndex_{0};
 
- public:
-  static void statUpdaterThreadRun();
+  // Name of the stats update function registered with the function scheduler.
+  const std::string statsUpdateFunctionHandle_;
+
+  std::vector<std::string> statsEnabledPools_;
+
+  // Aggregates stats for all associated proxies. Should be called periodically.
+  void updateStats();
 };
 }
 }

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -67,6 +65,13 @@ createReply(ErrorReplyT, mc_res_t result, std::string errorMessage) {
 template <class Request>
 ReplyT<Request> createReply(TkoReplyT) {
   return ReplyT<Request>(mc_res_tko);
+}
+
+template <class Request>
+ReplyT<Request> createReply(TkoReplyT, std::string errorMessage) {
+  ReplyT<Request> reply(mc_res_tko);
+  carbon::setMessageIfPresent(reply, std::move(errorMessage));
+  return reply;
 }
 
 template <class Request>

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -37,18 +35,37 @@ void serializeCarbonStruct(
   msg.serialize(writer);
 }
 
+template <class Request>
+void serializeCarbonRequest(
+    const Request& req,
+    carbon::CarbonQueueAppenderStorage& storage) {
+  if (req.isBufferDirty()) {
+    serializeCarbonStruct(req, storage);
+  } else {
+    const auto& buf = *req.serializedBuffer();
+    storage.setFullBuffer(buf);
+  }
+}
+
 /**
  * A dispatcher for binary protol serialized Carbon structs.
  *
  * Given a type id and an IOBuf, unserializes the corresponding Carbon struct
- * and calls Proc::onTypedMessage(M&&, args...)
+ * and calls Proc::onTypedMessage(headerInfo, reqBuffer, M&&, args...)
  *
  * @param MessageList  List of supported Carbon messages: List<M, ...>
  *                     All Ms in the list must be Carbon struct types.
  * @param Proc         Derived processor class, may provide
- *                       void onTypedMessage(M&&, args...).
+ *                       void onTypedMessage(
+ *                          const UmbrellaMessageInfo& headerInfo,
+ *                          const folly::IOBuf& reqBuffer,
+ *                          M&& msg,
+ *                          args...).
  *                     If not provided, default implementation that forwards to
- *                       void onRequest(McServerRequestContext&&, M&& req)
+ *                       void onRequest(McServerRequestContext&& context,
+ *                                      M&& req,
+ *                                      const UmbrellaMessageInfo& headerInfo,
+ *                                      const folly::IOBuf& reqBuffer);
  *                     will be used.
  *                     Overloaded for every Carbon struct in MessageList.
  * @param Args         Additional arguments to pass through to onTypedMessage.
@@ -76,8 +93,13 @@ class CarbonMessageDispatcher {
 
   // Default onTypedMessage() implementation
   template <class M>
-  void onTypedMessage(M&& req, McServerRequestContext&& ctx) {
-    static_cast<Proc&>(*this).onRequest(std::move(ctx), std::move(req));
+  void onTypedMessage(
+      const UmbrellaMessageInfo& headerInfo,
+      const folly::IOBuf& reqBuffer,
+      M&& req,
+      McServerRequestContext&& ctx) {
+    static_cast<Proc&>(*this).onRequest(
+        std::move(ctx), std::move(req), headerInfo, reqBuffer);
   }
 
   template <class M>
@@ -93,7 +115,7 @@ class CarbonMessageDispatcher {
     req.setTraceId(headerInfo.traceId);
     req.deserialize(reader);
     static_cast<Proc&>(me).onTypedMessage(
-        std::move(req), std::forward<Args>(args)...);
+        headerInfo, reqBuf, std::move(req), std::forward<Args>(args)...);
   }
 
  private:
@@ -105,5 +127,5 @@ class CarbonMessageDispatcher {
       Args...>
       dispatcher_;
 };
-}
-} // facebook::memcache
+} // namespace memcache
+} // namespace facebook

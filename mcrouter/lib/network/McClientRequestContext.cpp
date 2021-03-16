@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "McClientRequestContext.h"
@@ -71,7 +69,9 @@ void McClientRequestContextBase::fireStateChangeCallbacks(
 }
 
 void McClientRequestContextBase::scheduleTimeout() {
-  batonTimeoutHandler_.scheduleTimeout(batonWaitTimeout_);
+  if (state() != ReqState::COMPLETE) {
+    batonTimeoutHandler_.scheduleTimeout(batonWaitTimeout_);
+  }
 }
 
 McClientRequestContextBase::~McClientRequestContextBase() {
@@ -146,6 +146,10 @@ void McClientRequestContextQueue::markAsPending(
   }
 }
 
+McClientRequestContextBase& McClientRequestContextQueue::peekNextPending() {
+  return pendingQueue_.front();
+}
+
 McClientRequestContextBase& McClientRequestContextQueue::markNextAsSending() {
   auto& req = pendingQueue_.front();
   pendingQueue_.pop_front();
@@ -173,6 +177,8 @@ McClientRequestContextBase& McClientRequestContextQueue::markNextAsSent() {
       timedOutInitializers_.push(req.initializer_);
     }
     req.canceled();
+  } else if (req.state() == State::COMPLETE) {
+    req.baton_.post();
   } else {
     assert(req.state() == State::WRITE_QUEUE);
     req.setState(State::PENDING_REPLY_QUEUE);

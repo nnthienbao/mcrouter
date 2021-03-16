@@ -1,15 +1,15 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
 #include <utility>
+
+#include <folly/Varint.h>
 
 #include "mcrouter/lib/network/ServerLoad.h"
 
@@ -49,6 +49,7 @@ struct UmbrellaMessageInfo {
   uint64_t uncompressedBodySize{0};
   uint64_t dropProbability{0}; // Use uint64_t to store a double.
   ServerLoad serverLoad{0};
+  uint64_t passThroughKey{0};
 };
 
 enum class CaretAdditionalFieldType {
@@ -72,6 +73,9 @@ enum class CaretAdditionalFieldType {
 
   // Load on the server
   SERVER_LOAD = 7,
+
+  // Key to be used for a pass-through proxy
+  PASS_THROUGH_KEY = 8,
 };
 
 } // memcache

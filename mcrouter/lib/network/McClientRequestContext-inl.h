@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "mcrouter/lib/Reply.h"
@@ -12,27 +10,6 @@
 
 namespace facebook {
 namespace memcache {
-
-namespace {
-#ifndef LIBMC_FBTRACE_DISABLE
-
-template <class Request>
-typename std::enable_if<
-    RequestHasFbTraceInfo<Request>::value,
-    const mc_fbtrace_info_s*>::type inline getFbTraceInfo(const Request&
-                                                              request) {
-  return request.fbtraceInfo();
-}
-
-template <class Request>
-typename std::enable_if<
-    !RequestHasFbTraceInfo<Request>::value,
-    const mc_fbtrace_info_s*>::type inline getFbTraceInfo(const Request&) {
-  return nullptr;
-}
-
-#endif
-} // anonymous
 
 template <class Reply>
 void McClientRequestContextBase::reply(Reply&& r) {
@@ -65,16 +42,15 @@ McClientRequestContextBase::McClientRequestContextBase(
     const Request& request,
     uint64_t reqid,
     mc_protocol_t protocol,
-    std::shared_ptr<AsyncMcClientImpl> client,
     folly::Optional<ReplyT<Request>>& replyStorage,
     McClientRequestContextQueue& queue,
     InitializerFuncPtr initializer,
     const std::function<void(int pendingDiff, int inflightDiff)>& onStateChange,
-    const CodecIdRange& supportedCodecs)
-    : reqContext(request, reqid, protocol, supportedCodecs),
+    const CodecIdRange& supportedCodecs,
+    size_t passThroughKey)
+    : reqContext(request, reqid, protocol, supportedCodecs, passThroughKey),
       id(reqid),
       queue_(queue),
-      client_(std::move(client)),
       replyType_(typeid(ReplyT<Request>)),
       replyStorage_(reinterpret_cast<void*>(&replyStorage)),
       initializer_(std::move(initializer)),
@@ -149,21 +125,21 @@ McClientRequestContext<Request>::McClientRequestContext(
     const Request& request,
     uint64_t reqid,
     mc_protocol_t protocol,
-    std::shared_ptr<AsyncMcClientImpl> client,
     McClientRequestContextQueue& queue,
     McClientRequestContextBase::InitializerFuncPtr func,
     const std::function<void(int pendingDiff, int inflightDiff)>& onStateChange,
-    const CodecIdRange& supportedCodecs)
+    const CodecIdRange& supportedCodecs,
+    size_t passThroughKey)
     : McClientRequestContextBase(
           request,
           reqid,
           protocol,
-          std::move(client),
           replyStorage_,
           queue,
           std::move(func),
           onStateChange,
-          supportedCodecs)
+          supportedCodecs,
+          passThroughKey)
 #ifndef LIBMC_FBTRACE_DISABLE
       ,
       fbtraceInfo_(getFbTraceInfo(request))
@@ -189,9 +165,29 @@ void McClientRequestContextQueue::reply(
     auto iter = getContextById(id);
     if (iter != set_.end()) {
       ctx = &(*iter);
-      assert(iter->state() == State::PENDING_REPLY_QUEUE);
-      pendingReplyQueue_.erase(pendingReplyQueue_.iterator_to(*iter));
-      set_.erase(iter);
+      if (iter->state() == State::PENDING_REPLY_QUEUE) {
+        pendingReplyQueue_.erase(pendingReplyQueue_.iterator_to(*iter));
+        set_.erase(iter);
+      } else if (iter->state() == State::WRITE_QUEUE) {
+        // We didn't get write callback yet, so need to properly handle that.
+        set_.erase(iter);
+      } else {
+        LOG_FAILURE(
+            "AsyncMcClient",
+            failure::Category::kOther,
+            "Received reply for a request in an unexpected state {}!",
+            static_cast<uint64_t>(iter->state()));
+        return;
+      }
+
+      auto oldState = ctx->state();
+      ctx->reply(std::move(r));
+      ctx->setReplyStatsContext(replyStatsContext);
+      ctx->setState(State::COMPLETE);
+
+      if (oldState == State::PENDING_REPLY_QUEUE) {
+        ctx->baton_.post();
+      }
     }
   } else {
     // First we're going to receive replies for timed out requests.
@@ -211,20 +207,20 @@ void McClientRequestContextQueue::reply(
           failure::Category::kOther,
           "Received unexpected reply from server!");
     }
-  }
 
-  if (ctx) {
-    ctx->reply(std::move(r));
-    ctx->setReplyStatsContext(replyStatsContext);
-    if (ctx->state() == State::PENDING_REPLY_QUEUE) {
-      ctx->setState(State::COMPLETE);
-      ctx->baton_.post();
-    } else {
-      // Move the request to the replied queue.
-      ctx->setState(State::REPLIED_QUEUE);
-      repliedQueue_.push_back(*ctx);
+    if (ctx) {
+      ctx->reply(std::move(r));
+      ctx->setReplyStatsContext(replyStatsContext);
+      if (ctx->state() == State::PENDING_REPLY_QUEUE) {
+        ctx->setState(State::COMPLETE);
+        ctx->baton_.post();
+      } else {
+        // Move the request to the replied queue.
+        ctx->setState(State::REPLIED_QUEUE);
+        repliedQueue_.push_back(*ctx);
+      }
     }
   }
 }
-}
-} // facebook::memcache
+} // namespace memcache
+} // namespace facebook

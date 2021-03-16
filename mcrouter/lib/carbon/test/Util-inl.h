@@ -1,10 +1,8 @@
 /*
  *  Copyright (c) 2016-present, Facebook, Inc.
- *  All rights reserved.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <sys/uio.h>
@@ -33,8 +31,7 @@ T serializeAndDeserialize(const T& toSerialize, size_t& bytesWritten) {
   auto* curBuf = &buf;
   const auto iovs = storage.getIovecs();
   bytesWritten = 0;
-  // Skip Caret header iovec (with index 0)
-  for (size_t i = 1; i < iovs.second; ++i) {
+  for (size_t i = 0; i < iovs.second; ++i) {
     const struct iovec* iov = iovs.first + i;
     size_t written = 0;
     while (written < iov->iov_len) {

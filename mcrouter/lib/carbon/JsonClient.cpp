@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "JsonClient.h"
@@ -15,8 +13,25 @@
 #include "mcrouter/lib/network/ConnectionOptions.h"
 
 using facebook::memcache::ConnectionOptions;
+using facebook::memcache::SecurityMech;
 
 namespace carbon {
+
+namespace {
+ConnectionOptions getConnectionOptions(const JsonClient::Options& opts) {
+  ConnectionOptions options(opts.host, opts.port, mc_caret_protocol);
+  if (opts.useSsl) {
+    options.securityMech = SecurityMech::TLS;
+    options.sslPemCertPath = opts.pemCertPath;
+    options.sslPemKeyPath = opts.pemKeyPath;
+    options.sslPemCaPath = opts.pemCaPath;
+    options.sslServiceIdentity = opts.sslServiceIdentity;
+    options.sessionCachingEnabled = true;
+    options.tfoEnabledForSsl = true;
+  }
+  return options;
+}
+} // anonymous namespace
 
 JsonClient::JsonClient(
     JsonClient::Options options,
@@ -24,9 +39,7 @@ JsonClient::JsonClient(
     : options_{std::move(options)},
       onError_{std::move(onError)},
       evb_{/* enableTimeMeasurement */ false},
-      client_{
-          evb_,
-          ConnectionOptions(options_.host, options_.port, mc_caret_protocol)},
+      client_{evb_, getConnectionOptions(options_)},
       fiberManager_{folly::fibers::getFiberManager(evb_)} {}
 
 bool JsonClient::sendRequests(

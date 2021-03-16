@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -26,18 +24,35 @@ using TestHandle = TestHandleImpl<McrouterRouteHandleIf>;
 /**
  * Create mcrouter instance for test
  */
-CarbonRouterInstance<McrouterRouterInfo>* getTestRouter();
+template <class RouterInfo = McrouterRouterInfo>
+inline CarbonRouterInstance<RouterInfo>* getTestRouter() {
+  McrouterOptions opts = defaultTestOptions();
+  opts.config = "{ \"route\": \"NullRoute\" }";
+  std::string name = "test_";
+  name += RouterInfo::name;
+  return CarbonRouterInstance<RouterInfo>::init(name, opts);
+}
 
 /**
  * Create recording ProxyRequestContext for fiber locals
  */
-std::shared_ptr<ProxyRequestContextWithInfo<McrouterRouterInfo>>
-getTestContext();
+template <class RouterInfo = McrouterRouterInfo>
+inline std::shared_ptr<ProxyRequestContextWithInfo<RouterInfo>>
+getTestContext() {
+  return ProxyRequestContextWithInfo<RouterInfo>::createRecording(
+      *getTestRouter<RouterInfo>()->getProxy(0), nullptr);
+}
 
 /**
  * Set valid McrouterFiberContext in fiber locals
  */
-void mockFiberContext();
+template <class RouterInfo = McrouterRouterInfo>
+inline void mockFiberContext() {
+  std::shared_ptr<ProxyRequestContextWithInfo<RouterInfo>> ctx;
+  folly::fibers::runInMainContext(
+      [&ctx]() { ctx = getTestContext<RouterInfo>(); });
+  fiber_local<RouterInfo>::setSharedCtx(std::move(ctx));
+}
 }
 }
 } // facebook::memcache::mcrouter

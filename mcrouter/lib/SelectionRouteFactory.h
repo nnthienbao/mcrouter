@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -13,7 +11,7 @@
 
 #include "mcrouter/lib/config/RouteHandleBuilder.h"
 #include "mcrouter/lib/routes/SelectionRoute.h"
-#include "mcrouter/routes/ErrorRouteFactory.h"
+#include "mcrouter/routes/ErrorRoute.h"
 
 namespace facebook {
 namespace memcache {
@@ -37,6 +35,9 @@ typename RouterInfo::RouteHandlePtr createSelectionRoute(
   if (!outOfRangeDestination) {
     outOfRangeDestination =
         mcrouter::createErrorRoute<RouterInfo>("Invalid destination index.");
+  }
+  if (children.empty()) {
+    return std::move(outOfRangeDestination);
   }
   return makeRouteHandleWithInfo<RouterInfo, SelectionRoute, Selector>(
       std::move(children),

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -80,6 +78,15 @@ class ShardSplitter {
   const ShardSplitInfo* getShardSplit(
       folly::StringPiece key,
       folly::StringPiece& shardId) const;
+
+  /**
+   * Returns information about shard split given shard id.
+   *
+   * @return  nullptr if there is no
+   *          shard split found. Otherwise returns pointer to ShardSplitInfo.
+   */
+  const ShardSplitInfo* FOLLY_NULLABLE
+  getShardSplit(folly::StringPiece shardId) const;
 
   const folly::StringKeyedUnorderedMap<ShardSplitInfo>& getShardSplits() const {
     return shardSplits_;

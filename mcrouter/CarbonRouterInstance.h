@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -23,6 +21,7 @@
 #include "mcrouter/CarbonRouterClient.h"
 #include "mcrouter/CarbonRouterInstanceBase.h"
 #include "mcrouter/ConfigApi.h"
+#include "mcrouter/FileObserver.h"
 #include "mcrouter/Proxy.h"
 #include "mcrouter/ProxyConfigBuilder.h"
 
@@ -47,7 +46,7 @@ class CarbonRouterInstance
      so the users don't need to worry about destruction. */
 
   /**
-   * @return  If an instance with the given persistence_id already exists,
+   * @return  If an instance with the given persistenceId already exists,
    *   returns a pointer to it. Options are ignored in this case.
    *   Otherwise spins up a new instance and returns the pointer to it. May
    *   return nullptr if the McRouterManager singleton is unavailable, perhaps
@@ -60,17 +59,23 @@ class CarbonRouterInstance
    *   the provided options.
    */
   static CarbonRouterInstance<RouterInfo>* init(
-      folly::StringPiece persistence_id,
+      folly::StringPiece persistenceId,
       const McrouterOptions& options,
       const std::vector<folly::EventBase*>& evbs =
           std::vector<folly::EventBase*>());
 
   /**
-   * If an instance with the given persistence_id already exists,
+   * If an instance with the given persistenceId already exists,
    * returns a pointer to it. Otherwise returns nullptr.
    */
   static CarbonRouterInstance<RouterInfo>* get(
-      folly::StringPiece persistence_id);
+      folly::StringPiece persistenceId);
+
+  /**
+   * If an instance with the given persistenceId already exists,
+   * returns true. Otherwise returns false.
+   */
+  static bool hasInstance(folly::StringPiece persistenceId);
 
   /**
    * Intended for short-lived instances with unusual configs
@@ -150,6 +155,8 @@ class CarbonRouterInstance
 
   std::atomic<bool> shutdownStarted_{false};
 
+  FileObserverHandle runtimeVarsObserverHandle_;
+
   ConfigApi::CallbackHandle configUpdateHandle_;
 
   /**
@@ -179,9 +186,6 @@ class CarbonRouterInstance
 
   folly::Expected<folly::Unit, std::string> spinUp(
       const std::vector<folly::EventBase*>& evbs);
-
-  void startAwriterThreads();
-  void stopAwriterThreads() noexcept;
 
   void spawnAuxiliaryThreads();
   void joinAuxiliaryThreads() noexcept;

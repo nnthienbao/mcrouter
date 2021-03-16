@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -23,8 +21,9 @@ constexpr const char* const HelloRequest::name;
 void HelloRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeField(2 /* field id */, shardId());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void HelloRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -43,6 +42,10 @@ void HelloRequest::deserialize(carbon::CarbonProtocolReader& reader) {
         reader.readField(key(), fieldType);
         break;
       }
+      case 2: {
+        reader.readField(shardId(), fieldType);
+        break;
+      }
       default: {
         reader.skip(fieldType);
         break;
@@ -55,8 +58,8 @@ void HelloRequest::deserialize(carbon::CarbonProtocolReader& reader) {
 void HelloReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, result());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void HelloReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -89,8 +92,9 @@ constexpr const char* const GoodbyeRequest::name;
 void GoodbyeRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, key());
+  writer.writeField(2 /* field id */, shardId());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void GoodbyeRequest::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -109,6 +113,10 @@ void GoodbyeRequest::deserialize(carbon::CarbonProtocolReader& reader) {
         reader.readField(key(), fieldType);
         break;
       }
+      case 2: {
+        reader.readField(shardId(), fieldType);
+        break;
+      }
       default: {
         reader.skip(fieldType);
         break;
@@ -122,8 +130,8 @@ void GoodbyeReply::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeStructBegin();
   writer.writeField(1 /* field id */, result());
   writer.writeField(2 /* field id */, message());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void GoodbyeReply::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -154,5 +162,4 @@ void GoodbyeReply::deserialize(carbon::CarbonProtocolReader& reader) {
   }
   reader.readStructEnd();
 }
-
-} // hellogoodbye
+} // namespace hellogoodbye

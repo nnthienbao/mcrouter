@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <signal.h>
@@ -45,8 +43,10 @@ void serverLoop(
   // Manually override proxy assignment
   routerClient->setProxy(proxy);
 
-  worker.setOnRequest(
-      RequestHandlerType(*routerClient, standaloneOpts.retain_source_ip));
+  worker.setOnRequest(RequestHandlerType(
+      *routerClient,
+      standaloneOpts.retain_source_ip,
+      standaloneOpts.enable_pass_through_mode));
   worker.setOnConnectionAccepted([proxy]() {
     proxy->stats().increment(successful_client_connections_stat);
     proxy->stats().increment(num_clients_stat);
@@ -88,12 +88,16 @@ bool runServer(
   } else if (!standaloneOpts.unix_domain_sock.empty()) {
     opts.unixDomainSockPath = standaloneOpts.unix_domain_sock;
   } else {
+    opts.listenAddresses = standaloneOpts.listen_addresses;
     opts.ports = standaloneOpts.ports;
     opts.sslPorts = standaloneOpts.ssl_ports;
     opts.tlsTicketKeySeedPath = standaloneOpts.tls_ticket_key_seed_path;
-    opts.pemCertPath = mcrouterOpts.pem_cert_path;
-    opts.pemKeyPath = mcrouterOpts.pem_key_path;
-    opts.pemCaPath = mcrouterOpts.pem_ca_path;
+    opts.pemCertPath = standaloneOpts.server_pem_cert_path;
+    opts.pemKeyPath = standaloneOpts.server_pem_key_path;
+    opts.pemCaPath = standaloneOpts.server_pem_ca_path;
+    opts.sslRequirePeerCerts = standaloneOpts.ssl_require_peer_certs;
+    opts.tfoEnabledForSsl = mcrouterOpts.enable_ssl_tfo;
+    opts.tfoQueueSize = standaloneOpts.tfo_queue_size;
   }
 
   opts.numThreads = mcrouterOpts.num_proxies;
@@ -125,9 +129,25 @@ bool runServer(
     AsyncMcServer server(opts);
     server.installShutdownHandler({SIGINT, SIGTERM});
 
-    auto router = CarbonRouterInstance<RouterInfo>::init(
-        "standalone", mcrouterOpts, server.eventBases());
+    CarbonRouterInstance<RouterInfo>* router = nullptr;
 
+    SCOPE_EXIT {
+      if (router) {
+        router->shutdown();
+      }
+      server.join();
+
+      LOG(INFO) << "Shutting down";
+
+      freeAllRouters();
+
+      if (!opts.unixDomainSockPath.empty()) {
+        std::remove(opts.unixDomainSockPath.c_str());
+      }
+    };
+
+    router = CarbonRouterInstance<RouterInfo>::init(
+        "standalone", mcrouterOpts, server.eventBases());
     if (router == nullptr) {
       LOG(ERROR) << "CRITICAL: Failed to initialize mcrouter!";
       return false;
@@ -156,16 +176,6 @@ bool runServer(
         [&shutdownBaton]() { shutdownBaton.post(); });
 
     shutdownBaton.wait();
-    router->shutdown();
-    server.join();
-
-    LOG(INFO) << "Shutting down";
-
-    freeAllRouters();
-
-    if (!opts.unixDomainSockPath.empty()) {
-      std::remove(opts.unixDomainSockPath.c_str());
-    }
   } catch (const std::exception& e) {
     LOG(ERROR) << e.what();
     return false;

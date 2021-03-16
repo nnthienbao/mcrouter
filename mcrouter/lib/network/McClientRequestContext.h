@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -41,6 +39,7 @@ class McClientRequestContextBase
 
   McSerializedRequest reqContext;
   uint64_t id;
+  bool isBatchTail{false};
 
   McClientRequestContextBase(const McClientRequestContextBase&) = delete;
   McClientRequestContextBase& operator=(
@@ -94,13 +93,13 @@ class McClientRequestContextBase
       const Request& request,
       uint64_t reqid,
       mc_protocol_t protocol,
-      std::shared_ptr<AsyncMcClientImpl> client,
       folly::Optional<ReplyT<Request>>& replyStorage,
       McClientRequestContextQueue& queue,
       InitializerFuncPtr initializer,
       const std::function<void(int pendingDiff, int inflightDiff)>&
           onStateChange,
-      const CodecIdRange& supportedCodecs);
+      const CodecIdRange& supportedCodecs,
+      size_t passThroughKey);
 
   virtual void sendTraceOnReply() = 0;
 
@@ -126,7 +125,6 @@ class McClientRequestContextBase
  private:
   friend class McClientRequestContextQueue;
 
-  std::shared_ptr<AsyncMcClientImpl> client_;
   std::type_index replyType_;
   folly::SafeIntrusiveListHook hook_;
   void* replyStorage_;
@@ -191,12 +189,12 @@ class McClientRequestContext : public McClientRequestContextBase {
       const Request& request,
       uint64_t reqid,
       mc_protocol_t protocol,
-      std::shared_ptr<AsyncMcClientImpl> client,
       McClientRequestContextQueue& queue,
       McClientRequestContextBase::InitializerFuncPtr,
       const std::function<void(int pendingDiff, int inflightDiff)>&
           onStateChange,
-      const CodecIdRange& supportedCodecs);
+      const CodecIdRange& supportedCodecs,
+      size_t passThroughKey);
 
   std::string getContextTypeStr() const final;
 
@@ -250,6 +248,13 @@ class McClientRequestContextQueue {
    * Adds request into pending queue.
    */
   void markAsPending(McClientRequestContextBase& req);
+
+  /**
+   * Peek next request that we're about to send.
+   *
+   * @return a reference to the next request in the pending queue.
+   */
+  McClientRequestContextBase& peekNextPending();
 
   /**
    * Moves the first request from pending queue into sending queue.
@@ -355,7 +360,7 @@ class McClientRequestContextQueue {
 
   std::string getFirstAliveRequestInfo() const;
 };
-}
-} // facebook::memcache
+} // namespace memcache
+} // namespace facebook
 
 #include "McClientRequestContext-inl.h"

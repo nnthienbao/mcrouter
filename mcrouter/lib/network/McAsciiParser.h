@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -73,16 +71,6 @@ class McAsciiParserBase {
    */
   bool readValue(folly::IOBuf& buffer, folly::IOBuf& to);
   bool readValue(folly::IOBuf& buffer, folly::Optional<folly::IOBuf>& to);
-
-  static void appendKeyPiece(
-      const folly::IOBuf& from,
-      folly::IOBuf& to,
-      const char* posStart,
-      const char* posEnd);
-  static void trimIOBufToRange(
-      folly::IOBuf& buffer,
-      const char* posStart,
-      const char* posEnd);
 
   std::string currentErrorDescription_;
 
@@ -179,6 +167,9 @@ class McClientAsciiParser : public McAsciiParserBase {
 namespace detail {
 template <class RequestList>
 class CallbackBase;
+
+template <class Callback, class Requests>
+class CallbackWrapper;
 } // detail
 
 class McServerAsciiParser : public McAsciiParserBase {

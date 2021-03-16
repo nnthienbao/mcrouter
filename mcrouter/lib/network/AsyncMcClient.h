@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -18,6 +16,7 @@
 #include "mcrouter/lib/network/ConnectionOptions.h"
 
 namespace folly {
+class AsyncSocket;
 class EventBase;
 } // folly
 
@@ -38,9 +37,13 @@ struct ReplyStatsContext;
 class AsyncMcClient {
  public:
   using ConnectionDownReason = AsyncMcClientImpl::ConnectionDownReason;
+  using FlushList = AsyncMcClientImpl::FlushList;
 
   AsyncMcClient(folly::EventBase& eventBase, ConnectionOptions options);
   AsyncMcClient(folly::VirtualEventBase& eventBase, ConnectionOptions options);
+  ~AsyncMcClient() {
+    base_->setFlushList(nullptr);
+  }
 
   /**
    * Close connection and fail all outstanding requests immediately.
@@ -62,7 +65,7 @@ class AsyncMcClient {
    *       some requests left, for wich reply callback wasn't called yet.
    */
   void setStatusCallbacks(
-      std::function<void()> onUp,
+      std::function<void(const folly::AsyncTransportWrapper&)> onUp,
       std::function<void(ConnectionDownReason)> onDown);
 
   /**
@@ -83,13 +86,39 @@ class AsyncMcClient {
 
   /**
    * Send request synchronously (i.e. blocking call).
-   * Note: it must be called only from fiber context. It will block the current
+   * NOTE: it must be called only from fiber context. It will block the current
    *       stack and will send request only when we loop EventBase.
+   *
+   * @param request       The request to send.
+   * @param timeout       The timeout of this call.
+   * @param replyContext  Output argument that can be used to return information
+   *                      about the reply received. If nullptr, it will be
+   *                      ignored (i.e. no information is going be sent back up)
    */
   template <class Request>
   ReplyT<Request> sendSync(
       const Request& request,
       std::chrono::milliseconds timeout,
+      ReplyStatsContext* replyContext = nullptr);
+
+  /**
+   * Send request synchronously (i.e. blocking call).
+   * NOTE: it must be called only from fiber context. It will block the current
+   *       stack and will send request only when we loop EventBase.
+   *
+   * @param request         The request to send.
+   * @param timeout         The timeout of this call.
+   * @param passThroughKey  Integer key to be sent as and additional field.
+   * @param replyContext    Output argument that can be used to return
+   *                        information about the reply received. If nullptr, it
+   *                        will be ignored (i.e. no information is going be
+   *                        sent back up).
+   */
+  template <class Request>
+  ReplyT<Request> sendSync(
+      const Request& request,
+      std::chrono::milliseconds timeout,
+      size_t passThroughKey,
       ReplyStatsContext* replyContext = nullptr);
 
   /**
@@ -149,6 +178,14 @@ class AsyncMcClient {
    */
   template <class Request>
   double getDropProbability() const;
+
+  /**
+   * Set external queue for managing flush callbacks. By default we'll use
+   * EventBase as a manager of these callbacks.
+   */
+  void setFlushList(FlushList* flushList) {
+    base_->setFlushList(flushList);
+  }
 
  private:
   std::shared_ptr<AsyncMcClientImpl> base_;

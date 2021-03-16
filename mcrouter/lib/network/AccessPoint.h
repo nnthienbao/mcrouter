@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -15,6 +13,7 @@
 #include <folly/Range.h>
 
 #include "mcrouter/lib/mc/protocol.h"
+#include "mcrouter/lib/network/SecurityMech.h"
 
 namespace facebook {
 namespace memcache {
@@ -24,9 +23,9 @@ struct AccessPoint {
       folly::StringPiece host = "",
       uint16_t port = 0,
       mc_protocol_t protocol = mc_unknown_protocol,
-      bool useSsl = false,
+      SecurityMech mech = SecurityMech::NONE,
       bool compressed = false,
-      std::string hostname = "");
+      bool unixDomainSocket = false);
 
   /**
    * @param apString accepts host:port, host:port:protocol and
@@ -37,25 +36,18 @@ struct AccessPoint {
    *                     hostPortProtocol used
    * @param defaultCompressed The is the compression config to use if it's not
    *                          specified in the string.
-   * @param hostname  Name of the host that corresponds to this access point.
-   *                  Used only for logging.
    *
    * @return shared_ptr to an AccessPoint object
    */
   static std::shared_ptr<AccessPoint> create(
       folly::StringPiece apString,
       mc_protocol_t defaultProtocol,
-      bool defaultUseSsl = false,
+      SecurityMech defaultMech = SecurityMech::NONE,
       uint16_t portOverride = 0,
-      bool defaultCompressed = false,
-      std::string hostname = "");
+      bool defaultCompressed = false);
 
   const std::string& getHost() const {
     return host_;
-  }
-
-  const std::string& getHostname() const {
-    return hostname_;
   }
 
   uint16_t getPort() const {
@@ -66,12 +58,20 @@ struct AccessPoint {
     return protocol_;
   }
 
+  SecurityMech getSecurityMech() const {
+    return securityMech_;
+  }
+
   bool useSsl() const {
-    return useSsl_;
+    return securityMech_ != SecurityMech::NONE;
   }
 
   bool compressed() const {
     return compressed_;
+  }
+
+  bool isUnixDomainSocket() const {
+    return unixDomainSocket_;
   }
 
   /**
@@ -89,11 +89,12 @@ struct AccessPoint {
  private:
   std::string host_;
   uint16_t port_;
-  mc_protocol_t protocol_;
-  bool useSsl_{false};
-  bool isV6_{false};
+  mc_protocol_t protocol_ : 8;
+  SecurityMech securityMech_{SecurityMech::NONE};
   bool compressed_{false};
-  std::string hostname_;
+  bool isV6_{false};
+  bool unixDomainSocket_{false};
 };
-}
-} // facebook::memcache
+
+} // memcache
+} // facebook

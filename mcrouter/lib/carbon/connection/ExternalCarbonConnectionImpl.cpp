@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ExternalCarbonConnectionImpl.h"
@@ -16,13 +14,13 @@
 
 #include <gflags/gflags.h>
 
-#include <folly/Baton.h>
 #include <folly/ScopeGuard.h>
 #include <folly/Singleton.h>
-#include <folly/ThreadName.h>
 #include <folly/fibers/EventBaseLoopController.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/async/EventBaseManager.h>
+#include <folly/synchronization/Baton.h>
+#include <folly/system/ThreadName.h>
 
 #include "mcrouter/lib/McResUtil.h"
 

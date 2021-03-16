@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -244,19 +242,24 @@ static inline const char* mc_res_to_string(const mc_res_t result) {
   return "mc_res_unknown";
 }
 
+/* Flags are up to 48 bits in memcached server.
+ * <= 32bits uses 32bits of storage, else 16 bits stored elsewhere.
+ */
 enum mc_msg_flags_t {
   MC_MSG_FLAG_PHP_SERIALIZED = 0x1,
   MC_MSG_FLAG_COMPRESSED = 0x2,
   MC_MSG_FLAG_FB_SERIALIZED = 0x4,
   MC_MSG_FLAG_FB_COMPACT_SERIALIZED = 0x8,
   MC_MSG_FLAG_ASCII_INT_SERIALIZED = 0x10,
+  MC_MSG_FLAG_SIZE_SPLIT = 0x20,
   MC_MSG_FLAG_NZLIB_COMPRESSED = 0x800,
   MC_MSG_FLAG_QUICKLZ_COMPRESSED = 0x2000,
   MC_MSG_FLAG_SNAPPY_COMPRESSED = 0x4000,
-  MC_MSG_FLAG_BIG_VALUE = 0X8000,
+  MC_MSG_FLAG_BIG_VALUE = 0x8000,
   MC_MSG_FLAG_NEGATIVE_CACHE = 0x10000,
   MC_MSG_FLAG_HOT_KEY = 0x20000,
   MC_MSG_FLAG_ZSTD_COMPRESSED = 0x40000,
+  MC_MSG_FLAG_MANAGED_COMPRESSION_COMPRESSED = 0x80000,
   /* Bits reserved for application-specific extension flags: */
   MC_MSG_FLAG_USER_1 = 0x100000000LL,
   MC_MSG_FLAG_USER_2 = 0x200000000LL,
@@ -288,6 +291,8 @@ static inline const char* mc_flag_to_string(const enum mc_msg_flags_t flag) {
       return "FB_COMPACT_SERIALIZED";
     case MC_MSG_FLAG_ASCII_INT_SERIALIZED:
       return "ASCII_INT_SERIALIZED";
+    case MC_MSG_FLAG_SIZE_SPLIT:
+      return "SIZE_SPLIT";
     case MC_MSG_FLAG_NZLIB_COMPRESSED:
       return "NZLIB_COMPRESSED";
     case MC_MSG_FLAG_QUICKLZ_COMPRESSED:
@@ -300,6 +305,8 @@ static inline const char* mc_flag_to_string(const enum mc_msg_flags_t flag) {
       return "NEGATIVE_CACHE";
     case MC_MSG_FLAG_ZSTD_COMPRESSED:
       return "ZSTD_COMPRESSED";
+    case MC_MSG_FLAG_MANAGED_COMPRESSION_COMPRESSED:
+      return "MANAGED_COMPRESSION_COMPRESSED";
     case MC_MSG_FLAG_HOT_KEY:
       return "HOT_KEY";
     case MC_MSG_FLAG_USER_1:
@@ -398,5 +405,70 @@ const char* mc_req_err_to_string(const mc_req_err_t err);
  * @return Human-readable ASCII string for result.
  */
 const char* mc_res_to_response_string(const mc_res_t result);
+
+typedef enum mc_opcode_e : uint8_t {
+  mc_opcode_noop               = 0x0a,
+  mc_opcode_set                = 0x01,
+  mc_opcode_setq               = 0x11,
+  mc_opcode_add                = 0x02,
+  mc_opcode_addq               = 0x12,
+  mc_opcode_replace            = 0x03,
+  mc_opcode_replaceq           = 0x13,
+  mc_opcode_append             = 0x0e,
+  mc_opcode_appendq            = 0x19,
+  mc_opcode_prepend            = 0x0f,
+  mc_opcode_prependq           = 0x1a,
+  mc_opcode_get                = 0x00,
+  mc_opcode_getq               = 0x09,
+  mc_opcode_getk               = 0x0c,
+  mc_opcode_getkq              = 0x0d,
+  mc_opcode_delete             = 0x04,
+  mc_opcode_deleteq            = 0x14,
+  mc_opcode_increment          = 0x05,
+  mc_opcode_incrementq         = 0x15,
+  mc_opcode_decrement          = 0x06,
+  mc_opcode_decrementq         = 0x16,
+  mc_opcode_touch              = 0x1c,
+  mc_opcode_gat                = 0x1d,
+  mc_opcode_gatq               = 0x1e,
+  mc_opcode_stat               = 0x10,
+  mc_opcode_version            = 0x0b,
+  mc_opcode_quit               = 0x07,
+  mc_opcode_quitq              = 0x17,
+  mc_opcode_flush              = 0x08,
+  mc_opcode_flushq             = 0x18,
+  // SASL commands
+  mc_opcode_sasllistmechs      = 0x20,
+  mc_opcode_saslauth           = 0x21,
+  mc_opcode_saslstep           = 0x22,
+  // Range commands
+  mc_opcode_rset               = 0x31,
+  mc_opcode_rsetq              = 0x32,
+  mc_opcode_rappend            = 0x33,
+  mc_opcode_rappendq           = 0x34,
+  mc_opcode_rprepend           = 0x35,
+  mc_opcode_rprependq          = 0x36,
+  mc_opcode_rget               = 0x30,
+  mc_opcode_rdelete            = 0x37,
+  mc_opcode_rdeleteq           = 0x38,
+  mc_opcode_rincr              = 0x39,
+  mc_opcode_rincrq             = 0x3a,
+  mc_opcode_rdecr              = 0x3b,
+  mc_opcode_rdecrq             = 0x3c,
+  // v1.6 proposed commands
+  mc_opcode_setvbucket         = 0x3d,
+  mc_opcode_tapvbucketset      = 0x45,
+  mc_opcode_getvbucket         = 0x3e,
+  mc_opcode_tapdelete          = 0x42,
+  mc_opcode_verbosity          = 0x1b,
+  mc_opcode_tapflush           = 0x43,
+  mc_opcode_delvbucket         = 0x3f,
+  mc_opcode_tapconnect         = 0x40,
+  mc_opcode_tapmutation        = 0x41,
+  mc_opcode_tapopaque          = 0x44,
+  mc_opcode_tapcheckpointstart = 0x46,
+  mc_opcode_tapcheckpointend   = 0x47,
+} mc_opcode_t;
+
 
 __END_DECLS

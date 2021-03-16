@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -43,6 +41,8 @@ enum class SimpleEnum : int64_t {
   One = 1,
   Negative = -92233
 };
+
+std::string enumSimpleEnumToString(SimpleEnum val);
 
 class SimpleStruct {
  public:
@@ -91,14 +91,21 @@ class SimpleUnion {
       facebook::memcache::KV<3, std::string>>;
 
  public:
+  enum class ValueType : uint32_t {
+    EMPTY = 0,
+    UMEMBER1 = 1,
+    UMEMBER2 = 2,
+    UMEMBER3 = 3
+  };
+
   SimpleUnion() = default;
   SimpleUnion(const SimpleUnion&) = default;
   SimpleUnion& operator=(const SimpleUnion&) = default;
   SimpleUnion(SimpleUnion&&) = default;
   SimpleUnion& operator=(SimpleUnion&&) = default;
 
-  uint32_t which() const {
-    return _which_;
+  ValueType which() const {
+    return static_cast<ValueType>(_which_);
   }
 
   int64_t& umember1() {
@@ -181,6 +188,16 @@ class SimpleUnion {
     return _carbon_variant.emplace<C>(std::forward<Args>(args)...);
   }
 
+  template <
+      ValueType id,
+      class... Args,
+      class C = typename carbon::
+          FindByKey<static_cast<uint32_t>(id), _IdTypeMap>::type>
+  C& emplace(Args&&... args) {
+    _which_ = static_cast<uint32_t>(id);
+    return _carbon_variant.emplace<C>(std::forward<Args>(args)...);
+  }
+
   void serialize(carbon::CarbonProtocolWriter& writer) const;
 
   void deserialize(carbon::CarbonProtocolReader& reader);
@@ -225,6 +242,7 @@ class YetAnotherRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -288,9 +306,8 @@ class YetAnotherReply : public carbon::ReplyCommon {
  private:
   carbon::Result result_{mc_res_unknown};
 };
-
-} // util
-} // test2
-} // carbon
+} // namespace util
+} // namespace test2
+} // namespace carbon
 
 #include "BMessages-inl.h"

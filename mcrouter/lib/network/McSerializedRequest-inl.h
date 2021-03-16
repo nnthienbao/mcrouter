@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 namespace facebook {
@@ -60,7 +58,8 @@ McSerializedRequest::McSerializedRequest(
     const Request& req,
     size_t reqId,
     mc_protocol_t protocol,
-    const CodecIdRange& compressionCodecs)
+    const CodecIdRange& compressionCodecs,
+    size_t passThroughKey)
     : protocol_(protocol), typeId_(Request::typeId) {
   switch (protocol_) {
     case mc_ascii_protocol:
@@ -79,7 +78,12 @@ McSerializedRequest::McSerializedRequest(
         return;
       }
       if (!caretRequest_.prepare(
-              req, reqId, compressionCodecs, iovsBegin_, iovsCount_)) {
+              req,
+              reqId,
+              compressionCodecs,
+              passThroughKey,
+              iovsBegin_,
+              iovsCount_)) {
         result_ = Result::ERROR;
       }
       break;

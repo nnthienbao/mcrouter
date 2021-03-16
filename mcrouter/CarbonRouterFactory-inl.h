@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -26,7 +24,7 @@ bool getOptionsFromFlavor(
     std::unordered_map<std::string, std::string>&& optionOverrides,
     McrouterOptions& routerOptions);
 
-} // detail
+} // namespace detail
 
 template <class RouterInfo>
 CarbonRouterInstance<RouterInfo>* createRouterFromFlavor(
@@ -46,6 +44,19 @@ CarbonRouterInstance<RouterInfo>* createRouterFromFlavor(
   return CarbonRouterInstance<RouterInfo>::init(persistenceId, options);
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+template <class RouterInfo>
+std::shared_ptr<CarbonRouterInstance<RouterInfo>> createRouterFromFlavor(
+    folly::StringPiece flavorUri,
+    std::unordered_map<std::string, std::string> optionOverrides) {
+  McrouterOptions options;
+  if (!detail::getOptionsFromFlavor(
+          flavorUri, std::move(optionOverrides), options)) {
+    return nullptr;
+  }
+
+  return CarbonRouterInstance<RouterInfo>::create(std::move(options));
+}
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

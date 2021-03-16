@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <getopt.h>
@@ -29,6 +27,7 @@
 #include <folly/Format.h>
 #include <folly/Range.h>
 #include <folly/Singleton.h>
+#include <folly/logging/Init.h>
 
 #include "mcrouter/CarbonRouterInstance.h"
 #include "mcrouter/McrouterLogFailure.h"
@@ -346,7 +345,7 @@ void validateConfigAndExit() {
     auto router =
         CarbonRouterInstance<RouterInfo>::init("standalone-validate", opts);
     if (router == nullptr) {
-      throw std::runtime_error("Couldn't create mcrouter");
+      throw std::runtime_error("Couldn't create mcrouter.");
     }
   } catch (const std::exception& e) {
     LOG(ERROR) << "CRITICAL: Failed to initialize mcrouter: " << e.what();
@@ -367,6 +366,11 @@ void run() {
     exit(kExitStatusTransientError);
   }
 }
+
+// Configure folly to enable INFO+ messages, and everything else to
+// enable WARNING+.
+// Set the default log handler to log asynchronously by default.
+FOLLY_INIT_LOGGING_CONFIG(".=WARNING,folly=INFO; default:async=true");
 
 int main(int argc, char** argv) {
   folly::SingletonVault::singleton()->registrationComplete();
@@ -454,6 +458,7 @@ int main(int argc, char** argv) {
         "Unrecognized option: {}",
         option);
   }
+  initStandaloneSSL();
 
   srand(time(nullptr) + getpid());
 
@@ -477,17 +482,22 @@ int main(int argc, char** argv) {
     opts.router_name = port_str.c_str();
   }
 
-  if (validate_configs != ValidateConfigMode::NONE) {
-    failure::addHandler(failure::handlers::throwLogicError());
+  try {
+    if (validate_configs != ValidateConfigMode::NONE) {
+      failure::addHandler(failure::handlers::throwLogicError());
 
-    if (validate_configs == ValidateConfigMode::EXIT) {
-      CALL_BY_ROUTER_NAME(
-          standaloneOpts.carbon_router_name, validateConfigAndExit);
+      if (validate_configs == ValidateConfigMode::EXIT) {
+        CALL_BY_ROUTER_NAME(
+            standaloneOpts.carbon_router_name, validateConfigAndExit);
+      }
     }
+
+    standaloneInit(opts, standaloneOpts);
+
+    set_standalone_args(commandArgs);
+    CALL_BY_ROUTER_NAME(standaloneOpts.carbon_router_name, run);
+  } catch (const std::invalid_argument& ia) {
+    LOG(ERROR) << "Error starting mcrouter: " << ia.what();
+    exit(EXIT_FAILURE);
   }
-
-  standaloneInit(opts, standaloneOpts);
-
-  set_standalone_args(commandArgs);
-  CALL_BY_ROUTER_NAME(standaloneOpts.carbon_router_name, run);
 }

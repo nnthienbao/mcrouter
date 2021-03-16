@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -14,21 +12,24 @@
 #include <string>
 
 #include <folly/IntrusiveList.h>
+#include <folly/Range.h>
 #include <folly/SpinLock.h>
-#include <folly/io/async/AsyncTimeout.h>
 
 #include "mcrouter/ExponentialSmoothData.h"
 #include "mcrouter/TkoLog.h"
 #include "mcrouter/config.h"
-#include "mcrouter/lib/McOperation.h"
+#include "mcrouter/lib/Operation.h"
 #include "mcrouter/lib/mc/msg.h"
-#include "mcrouter/lib/network/AccessPoint.h"
-#include "mcrouter/lib/network/AsyncMcClient.h"
-#include "mcrouter/lib/network/gen/Memcache.h"
+
+namespace folly {
+class AsyncTimeout;
+} // namespace folly
 
 namespace facebook {
 namespace memcache {
 
+struct AccessPoint;
+class AsyncMcClient;
 struct ReplyStatsContext;
 
 namespace mcrouter {
@@ -60,24 +61,38 @@ class ProxyDestination {
     std::unique_ptr<std::array<uint64_t, mc_nres>> results;
     size_t probesSent{0};
     double retransPerKByte{0.0};
+
+    // last time this connection was closed due to inactivity
+    uint64_t inactiveConnectionClosedTimestampUs{0};
   };
 
-  ProxyBase* proxy{nullptr}; ///< for convenience
+  ProxyBase& proxy; // for convenience
 
   std::shared_ptr<TkoTracker> tracker;
 
   ~ProxyDestination();
 
-  // This is a blocking call that will return reply, once it's ready.
+  /**
+   * Sends a request to this destination.
+   * NOTE: This is a blocking call that will return reply, once it's ready.
+   *
+   * @param request             The request to send.
+   * @param requestContext      Context about this request.
+   * @param timeout             The timeout of this call.
+   * @param passThroughKey      Integer key that will be sent as an additional
+   *                            field. If 0, it will not be sent.
+   * @param replyStatsContext   Output argument with stats about the reply.
+   */
   template <class Request>
   ReplyT<Request> send(
       const Request& request,
       DestinationRequestCtx& requestContext,
       std::chrono::milliseconds timeout,
+      size_t passThroughKey,
       ReplyStatsContext& replyStatsContext);
 
   // returns true if okay to send req using this client
-  bool may_send() const;
+  bool maySend(mc_res_t& tkoReason) const;
 
   // Returns true if the current request should be dropped
   template <class Request>
@@ -101,10 +116,6 @@ class ProxyDestination {
 
   void updateShortestTimeout(std::chrono::milliseconds timeout);
 
-  void updatePoolName(std::string poolName) {
-    poolName_ = std::move(poolName);
-  }
-
   /**
    * Gracefully closes the connection, allowing it to properly drain if
    * possible.
@@ -113,14 +124,16 @@ class ProxyDestination {
 
  private:
   std::unique_ptr<AsyncMcClient> client_;
-  std::shared_ptr<const AccessPoint> accessPoint_;
-  mutable folly::SpinLock clientLock_; // AsyncMcClient lock for stats threads.
+  const std::shared_ptr<const AccessPoint> accessPoint_;
+  // Ensure proxy thread doesn't reset AsyncMcClient
+  // while config and stats threads may be accessing it
+  mutable folly::SpinLock clientLock_;
 
   // Shortest timeout among all DestinationRoutes using this destination
   std::chrono::milliseconds shortestTimeout_{0};
   const uint64_t qosClass_{0};
   const uint64_t qosPath_{0};
-  std::string routerInfoName_;
+  const folly::StringPiece routerInfoName_;
 
   Stats stats_;
 
@@ -130,7 +143,6 @@ class ProxyDestination {
 
   int probe_delay_next_ms{0};
   bool probeInflight_{false};
-  std::string poolName_;
   // The string is stored in ProxyDestinationMap::destinations_
   folly::StringPiece pdstnKey_; ///< consists of ap, server_timeout
 
@@ -142,22 +154,29 @@ class ProxyDestination {
       std::chrono::milliseconds timeout,
       uint64_t qosClass,
       uint64_t qosPath,
-      std::string routerInfoName);
+      folly::StringPiece routerInfoName);
 
   void setState(State st);
 
-  void start_sending_probes();
-  void stop_sending_probes();
+  /**
+   * If the connection was previously closed due to lack of activity,
+   * log for how long it was closed.
+   */
+  void updateConnectionClosedInternalStat();
 
-  void schedule_next_probe();
+  void startSendingProbes();
+  void stopSendingProbes();
 
-  void handle_tko(const mc_res_t result, bool is_probe_req);
+  void scheduleNextProbe();
+
+  void handleTko(const mc_res_t result, bool is_probe_req);
 
   // Process tko, stats and duration timer.
   void onReply(
       const mc_res_t result,
       DestinationRequestCtx& destreqCtx,
-      const ReplyStatsContext& replyStatsContext);
+      const ReplyStatsContext& replyStatsContext,
+      bool isRequestBufferDirty);
 
   AsyncMcClient& getAsyncMcClient();
   void initializeAsyncMcClient();
@@ -168,11 +187,17 @@ class ProxyDestination {
       std::chrono::milliseconds timeout,
       uint64_t qosClass,
       uint64_t qosPath,
-      std::string routerInfoName);
+      folly::StringPiece routerInfoName);
 
   void onTkoEvent(TkoLogEvent event, mc_res_t result) const;
 
-  void handleRxmittingConnection();
+  void handleRxmittingConnection(const mc_res_t result, uint64_t latency);
+
+  bool latencyAboveThreshold(uint64_t latency);
+
+  void onTransitionToState(State state);
+  void onTransitionFromState(State state);
+  void onTransitionImpl(State state, bool to);
 
   void* stateList_{nullptr};
   folly::IntrusiveListHook stateListHook_;
@@ -181,8 +206,9 @@ class ProxyDestination {
 
   friend class ProxyDestinationMap;
 };
-} // mcrouter
-} // memcache
-} // facebook
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook
 
 #include "ProxyDestination-inl.h"

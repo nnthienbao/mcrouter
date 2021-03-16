@@ -1,10 +1,8 @@
 /*
  *  Copyright (c) 2016-present, Facebook, Inc.
- *  All rights reserved.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -30,6 +28,14 @@ struct FollyDynamicConversionOptions {
    * If true, such fields would be omitted from the output completely.
    */
   bool ignoreUnserializableTypes{false};
+
+  /**
+   * If true, all fields will be serialized (including empty strings and
+   * integers with value == 0).
+   *
+   * If false, such fields will be omitted from the output completely.
+   */
+  bool serializeFieldsWithDefaultValue{true};
 };
 
 /**

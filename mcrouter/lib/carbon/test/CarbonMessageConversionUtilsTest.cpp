@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <gtest/gtest.h>
@@ -14,6 +12,8 @@
 #include "mcrouter/lib/IOBufUtil.h"
 #include "mcrouter/lib/carbon/CarbonMessageConversionUtils.h"
 #include "mcrouter/lib/carbon/test/gen/CarbonTest.h"
+
+using carbon::test2::util::SimpleUnion;
 
 TEST(CarbonMessageConversionUtils, toFollyDynamic_Complex) {
   carbon::test::TestRequest r;
@@ -50,7 +50,7 @@ TEST(CarbonMessageConversionUtils, toFollyDynamic_Complex) {
   r.testEnumVec() = std::vector<carbon::test2::util::SimpleEnum>(
       {carbon::test2::util::SimpleEnum::One,
        carbon::test2::util::SimpleEnum::Twenty});
-  r.testUnion().emplace<2>(true);
+  r.testUnion().emplace<SimpleUnion::ValueType::UMEMBER2>(true);
   r.testNestedVec() = {{1, 1, 1}, {2, 2, 2}};
   r.testUMap() = std::unordered_map<std::string, std::string>(
       {{"key", "value"}, {"adele", "beyonce"}});
@@ -59,6 +59,8 @@ TEST(CarbonMessageConversionUtils, toFollyDynamic_Complex) {
       {{"hello", {1, 1, 1}}, {"world", {2, 2, 2}}});
   r.testUSet() = std::unordered_set<std::string>({"hello", "world"});
   r.testSet() = std::set<uint64_t>({123, 456});
+  r.testIOBufList() =
+      std::vector<folly::IOBuf>({folly::IOBuf(), folly::IOBuf()});
 
   folly::dynamic expected = folly::dynamic::object(
       "__Base",
@@ -97,7 +99,8 @@ TEST(CarbonMessageConversionUtils, toFollyDynamic_Complex) {
           "world", folly::dynamic::array(2, 2, 2)))(
       "testUSet", folly::dynamic::array("hello", "world"))(
       "testSet", folly::dynamic::array(123, 456))("testType", "(user type)")(
-      "testOptionalVec", folly::dynamic::array());
+      "testOptionalVec", folly::dynamic::array())(
+      "testIOBufList", folly::dynamic::array("", ""));
 
   auto dynamic = carbon::convertToFollyDynamic(r);
   auto set = dynamic.at("testUSet");
@@ -122,6 +125,40 @@ TEST(CarbonMessageConversionUtils, toFollyDynamic_InlineMixins) {
   carbon::FollyDynamicConversionOptions opts;
   opts.inlineMixins = true;
   EXPECT_EQ(withInline, carbon::convertToFollyDynamic(s, opts));
+}
+
+TEST(CarbonMessageConversionUtils, toFollyDynamic_NoDefaultValues) {
+  carbon::test::SimpleStruct s;
+  s.baseInt64Member() = 0;
+  s.stringMember() = "abcdef";
+
+  const folly::dynamic expected =
+      folly::dynamic::object("stringMember", "abcdef")("enumMember", 20);
+
+  carbon::FollyDynamicConversionOptions opts;
+  opts.serializeFieldsWithDefaultValue = false;
+  EXPECT_EQ(expected, carbon::convertToFollyDynamic(s, opts));
+}
+
+TEST(CarbonMessageConversionUtils, toFollyDynamic_NoDefaultValues_Complex) {
+  carbon::test::TestRequest req;
+  req.testList() = std::vector<std::string>({"", "bce", ""});
+  req.testNestedVec() = {{0}, {2, 0, 2}, {}};
+  req.testChar() = 'a';
+
+  const folly::dynamic expected = folly::dynamic::object(
+      "__Base", folly::dynamic::object("enumMember", 20))(
+      "testList", folly::dynamic::array("", "bce", ""))("testChar", "a")(
+      "testEnum", 20)("testStruct", folly::dynamic::object("enumMember", 20))(
+      "testNestedVec",
+      folly::dynamic::array(
+          folly::dynamic::array(0),
+          folly::dynamic::array(2, 0, 2),
+          folly::dynamic::array()))("testType", "(user type)");
+
+  carbon::FollyDynamicConversionOptions opts;
+  opts.serializeFieldsWithDefaultValue = false;
+  EXPECT_EQ(expected, carbon::convertToFollyDynamic(req, opts));
 }
 
 TEST(CarbonMessageConversionUtils, fromFollyDynamic_InlineMixins) {
@@ -269,7 +306,7 @@ TEST(CarbonMessageConversionUtils, fromFollyDynamic_Complex) {
       r.testLongString());
   const folly::IOBuf expectedIobuf(
       folly::IOBuf::CopyBufferOp(), folly::StringPiece("iobuf string here..."));
-  EXPECT_TRUE(folly::IOBufEqual()(expectedIobuf, r.testIobuf()));
+  EXPECT_TRUE(folly::IOBufEqualTo()(expectedIobuf, r.testIobuf()));
 
   EXPECT_EQ(7, r.testStruct().int32Member());
   EXPECT_EQ("I'm nested!", r.testStruct().stringMember());
@@ -282,7 +319,7 @@ TEST(CarbonMessageConversionUtils, fromFollyDynamic_Complex) {
   ASSERT_TRUE(r.testOptionalString().hasValue());
   EXPECT_EQ("I exist!", r.testOptionalString().value());
 
-  ASSERT_EQ(3, r.testUnion().which());
+  ASSERT_EQ(SimpleUnion::ValueType::UMEMBER3, r.testUnion().which());
   EXPECT_EQ("abc def ghi", r.testUnion().umember3());
 
   ASSERT_EQ(3, r.testNestedVec().size());

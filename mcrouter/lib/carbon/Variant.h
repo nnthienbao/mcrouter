@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -131,11 +129,16 @@ class Variant {
   }
 
   std::type_index which() const {
-    static constexpr std::type_index types[sizeof...(Ts)] = {typeid(Ts)...};
+    static std::type_index types[sizeof...(Ts)] = {typeid(Ts)...};
     if (which_ >= 0 && static_cast<size_t>(which_) < sizeof...(Ts)) {
       return types[which_];
     }
     return typeid(void);
+  }
+
+  template <class T>
+  bool is() const {
+    return which() == std::type_index(typeid(T));
   }
 
   // When writing a Carbon structure visitor, it may be more efficient (avoiding

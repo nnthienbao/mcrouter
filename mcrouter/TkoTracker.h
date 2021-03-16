@@ -1,15 +1,14 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -20,6 +19,7 @@
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 
 #include "mcrouter/TkoCounters.h"
+#include "mcrouter/lib/mc/msg.h"
 
 namespace facebook {
 namespace memcache {
@@ -64,14 +64,23 @@ class TkoTracker {
   bool isSoftTko() const;
 
   /**
-   * @return Is the destination currently marked TKO?
+   * Tells whether or not the destination is marked as TKO.
    */
   bool isTko() const {
-    return sumFailures_ > tkoThreshold_;
+    // See sumFailures_ description for more details.
+    return sumFailures_.load(std::memory_order_relaxed) > tkoThreshold_;
   }
 
   /**
-   * @return current number of consecutive failures.
+   * The reason why the destination is marked as TKO.
+   * NOTE: If this box is not TKO'd, returns mc_res_unkown.
+   */
+  mc_res_t tkoReason() const {
+    return tkoReason_.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * @return The current number of consecutive failures.
    *         This is basically a number of recordHardFailure/recordSoftFailure
    *         calls after last recordSuccess.
    */
@@ -90,23 +99,25 @@ class TkoTracker {
    * tko_threshold "soft" failures in a row to mark a host TKO. Will not TKO
    * a host if currentSoftTkos would exceed maxSoftTkos
    *
-   * @param pdstn  a pointer to the calling proxydestination for tracking
-   *               responsibility.
+   * @param pdstn   A pointer to the calling proxydestination for tracking
+   *                responsibility.
+   * @param result  The result that caused the soft failure.
    *
    * @return true if we just reached tko_threshold with this result,
    *         marking the host TKO.  In this case, the calling proxy
    *         is responsible for sending probes and calling recordSuccess()
    *         once a probe is successful.
    */
-  bool recordSoftFailure(ProxyDestination* pdstn);
+  bool recordSoftFailure(ProxyDestination* pdstn, mc_res_t result);
 
   /**
    * Can be called from any proxy thread.
    * Signal that a "hard" failure occurred - marks the host TKO
    * right away.
    *
-   * @param pdstn  a pointer to the calling proxydestination for tracking
-   *               responsibility.
+   * @param pdstn   A pointer to the calling proxydestination for tracking
+   *                responsibility.
+   * @param result  The result that caused the hard failure.
    *
    * @return true if we just reached tko_threshold with this result,
    *         marking the host TKO.  In this case, the calling proxy
@@ -114,7 +125,7 @@ class TkoTracker {
    *         once a probe is successful. Note, transition from soft to hard
    *         TKO does not result in a change of responsibility.
    */
-  bool recordHardFailure(ProxyDestination* pdstn);
+  bool recordHardFailure(ProxyDestination* pdstn, mc_res_t result);
 
   /**
    * Resets all consecutive failures accumulated so far
@@ -140,28 +151,35 @@ class TkoTracker {
   // The string is stored in TkoTrackerMap::trackers_
   folly::StringPiece key_;
   const size_t tkoThreshold_;
-  const size_t maxSoftTkos_;
   TkoTrackerMap& trackerMap_;
 
-  /* sumFailures_ is used for a few things depending on the state of the
-     destination. For a destination that is not TKO, it tracks the number of
-     consecutive soft failures to a destination.
-     If a destination is soft TKO, it contains the numerical representation of
-     the pointer to the proxy thread that is responsible for sending it probes.
-     If a destination is hard TKO, it contains the same value as for soft TKO,
-     but with the LSB set to 1 instead of 0.
-     In summary, allowed values are:
-       0, 1, .., tkoThreshold_ - 1, pdstn, pdstn | 0x1, where pdstn is the
-       address of any of the proxy threads for this destination. */
+  /**
+   * sumFailures_ is used for a few things depending on the state of the
+   * destination. For a destination that is not TKO, it tracks the number of
+   * consecutive soft failures to a destination.
+   * If a destination is soft TKO, it contains the numerical representation of
+   * the pointer to the proxy thread that is responsible for sending it probes.
+   * If a destination is hard TKO, it contains the same value as for soft TKO,
+   * but with the LSB set to 1 instead of 0.
+   * In summary, allowed values are:
+   *   0, 1, .., tkoThreshold_ - 1, pdstn, pdstn | 0x1, where pdstn is the
+   *   address of any of the proxy threads for this destination.
+   */
   std::atomic<uintptr_t> sumFailures_{0};
 
   std::atomic<size_t> consecutiveFailureCount_{0};
 
-  /* Decrement the global counter of current soft TKOs. */
+  std::atomic<mc_res_t> tkoReason_{mc_res_unknown};
+
+  /**
+   * Decrement the global counter of current soft TKOs
+   */
   void decrementSoftTkoCount();
-  /* Attempt to increment the global counter of current soft TKOs. Return true
-     if successful and false if limits have been reached. */
-  bool incrementSoftTkoCount();
+
+  /**
+   * Increment the global counter of current soft TKOs.
+   */
+  void incrementSoftTkoCount();
 
   /* Modifies the value of sumFailures atomically. Fails only
      in the case that another proxy takes responsibility, in which case all
@@ -172,16 +190,11 @@ class TkoTracker {
   bool isResponsible(ProxyDestination* pdstn) const;
 
   /**
-   * @param tkoThreshold require this many soft failures to mark
-   *        the destination TKO
-   * @param maxSoftTkos the maximum number of concurrent soft TKOs allowed in
-   *        the router
-   * @param globalTkoStats number of TKO destination for current router
+   * @param tkoThreshold    Require this many soft failures to mark
+   *                        the destination TKO.
+   * @param globalTkoStats  Number of TKO destination for current router.
    */
-  TkoTracker(
-      size_t tkoThreshold,
-      size_t maxSoftTkos,
-      TkoTrackerMap& trackerMap);
+  TkoTracker(size_t tkoThreshold, TkoTrackerMap& trackerMap);
 
   friend class TkoTrackerMap;
 };
@@ -198,15 +211,12 @@ class TkoTrackerMap {
   /**
    * Creates/updates TkoTracker for `pdstn` and updates `pdstn->tko` pointer.
    */
-  void updateTracker(
-      ProxyDestination& pdstn,
-      const size_t tkoThreshold,
-      const size_t maxSoftTkos);
+  void updateTracker(ProxyDestination& pdstn, const size_t tkoThreshold);
 
   /**
    * @return  number of servers that recently returned error replies.
    */
-  size_t getSuspectServersCount();
+  size_t getSuspectServersCount() const;
 
   /**
    * @return  servers that recently returned error replies.
@@ -215,16 +225,15 @@ class TkoTrackerMap {
    *   }
    *   Only servers with positive number of failures will be returned.
    */
-  std::unordered_map<std::string, std::pair<bool, size_t>> getSuspectServers();
+  std::unordered_map<std::string, std::pair<bool, size_t>> getSuspectServers()
+      const;
 
   const TkoCounters& globalTkos() const {
     return globalTkos_;
   }
 
-  std::weak_ptr<TkoTracker> getTracker(folly::StringPiece key);
-
  private:
-  std::mutex mx_;
+  mutable std::mutex mx_;
   folly::StringKeyedUnorderedMap<std::weak_ptr<TkoTracker>> trackers_;
 
   // Total number of boxes marked as TKO.
@@ -232,8 +241,14 @@ class TkoTrackerMap {
 
   void removeTracker(folly::StringPiece key) noexcept;
 
+  // Thread-safe function that iterates over all tko trackers
+  void foreachTkoTracker(
+      const std::function<void(folly::StringPiece, const TkoTracker&)> func)
+      const;
+
   friend class TkoTracker;
 };
-}
-}
-} // facebook::memcache::mcrouter
+
+} // mcrouter
+} // memcache
+} // facebook

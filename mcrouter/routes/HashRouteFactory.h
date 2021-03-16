@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -14,12 +12,14 @@
 #include "mcrouter/lib/Ch3HashFunc.h"
 #include "mcrouter/lib/Crc32HashFunc.h"
 #include "mcrouter/lib/HashSelector.h"
+#include "mcrouter/lib/RendezvousHashFunc.h"
 #include "mcrouter/lib/SelectionRouteFactory.h"
 #include "mcrouter/lib/WeightedCh3HashFunc.h"
 #include "mcrouter/lib/config/RouteHandleFactory.h"
 #include "mcrouter/lib/routes/NullRoute.h"
 #include "mcrouter/lib/routes/SelectionRoute.h"
 #include "mcrouter/routes/LatestRoute.h"
+#include "mcrouter/routes/LoadBalancerRoute.h"
 #include "mcrouter/routes/McRouteHandleBuilder.h"
 #include "mcrouter/routes/ShardHashFunc.h"
 
@@ -81,8 +81,29 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf> createHashRoute(
   } else if (funcType == ConstShardHashFunc::type()) {
     return createHashRoute<RouterInfo, ConstShardHashFunc>(
         std::move(rh), std::move(salt), ConstShardHashFunc(n));
+  } else if (funcType == RendezvousHashFunc::type()) {
+    std::vector<folly::StringPiece> endpoints;
+
+    auto jtags = json.get_ptr("tags");
+    checkLogic(jtags, "HashRoute: tags needed for Rendezvous hash route");
+    checkLogic(jtags->isArray(), "HashRoute: tags is not an array");
+    checkLogic(
+        jtags->size() == rh.size(),
+        "HashRoute: number of tags doesn't match number of route handles");
+
+    for (const auto& jtag : *jtags) {
+      checkLogic(jtag.isString(), "HashRoute: tag is not a string");
+      endpoints.push_back(jtag.stringPiece());
+    }
+
+    return createHashRoute<RouterInfo, RendezvousHashFunc>(
+        std::move(rh),
+        std::move(salt),
+        RendezvousHashFunc(std::move(endpoints)));
   } else if (funcType == "Latest") {
     return createLatestRoute<RouterInfo>(json, std::move(rh), threadId);
+  } else if (funcType == "LoadBalancer") {
+    return createLoadBalancerRoute<RouterInfo>(json, std::move(rh));
   }
   throwLogic("Unknown hash function: {}", funcType);
 }

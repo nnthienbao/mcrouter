@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ProxyDestinationMap.h"
@@ -59,15 +57,10 @@ std::shared_ptr<ProxyDestination> ProxyDestinationMap::emplace(
     std::chrono::milliseconds timeout,
     uint64_t qosClass,
     uint64_t qosPath,
-    std::string routerInfoName) {
+    folly::StringPiece routerInfoName) {
   auto key = genProxyDestinationKey(*ap, timeout);
   auto destination = ProxyDestination::create(
-      *proxy_,
-      std::move(ap),
-      timeout,
-      qosClass,
-      qosPath,
-      std::move(routerInfoName));
+      *proxy_, std::move(ap), timeout, qosClass, qosPath, routerInfoName);
   {
     std::lock_guard<std::mutex> lck(destinationsLock_);
     auto destIt = destinations_.emplace(key, destination);
@@ -77,9 +70,7 @@ std::shared_ptr<ProxyDestination> ProxyDestinationMap::emplace(
   // Update shared area of ProxyDestinations with same key from different
   // threads. This shared area is represented with TkoTracker class.
   proxy_->router().tkoTrackerMap().updateTracker(
-      *destination,
-      proxy_->router().opts().failures_until_tko,
-      proxy_->router().opts().maximum_soft_tkos);
+      *destination, proxy_->router().opts().failures_until_tko);
 
   return destination;
 }

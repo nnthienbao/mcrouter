@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -22,11 +20,17 @@ void HelloRequest::visitFields(V&& v) {
   if (!v.visitField(1, "key", key_)) {
     return;
   }
+  if (!v.visitField(2, "shardId", shardId_)) {
+    return;
+  }
 }
 
 template <class V>
 void HelloRequest::visitFields(V&& v) const {
   if (!v.visitField(1, "key", key_)) {
+    return;
+  }
+  if (!v.visitField(2, "shardId", shardId_)) {
     return;
   }
 }
@@ -50,11 +54,17 @@ void GoodbyeRequest::visitFields(V&& v) {
   if (!v.visitField(1, "key", key_)) {
     return;
   }
+  if (!v.visitField(2, "shardId", shardId_)) {
+    return;
+  }
 }
 
 template <class V>
 void GoodbyeRequest::visitFields(V&& v) const {
   if (!v.visitField(1, "key", key_)) {
+    return;
+  }
+  if (!v.visitField(2, "shardId", shardId_)) {
     return;
   }
 }
@@ -78,5 +88,4 @@ void GoodbyeReply::visitFields(V&& v) const {
     return;
   }
 }
-
-} // hellogoodbye
+} // namespace hellogoodbye

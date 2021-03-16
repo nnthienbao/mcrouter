@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <vector>
@@ -19,7 +17,6 @@
 
 #include "mcrouter/AsyncWriter.h"
 #include "mcrouter/CarbonRouterInstanceBase.h"
-#include "mcrouter/FileObserver.h"
 #include "mcrouter/McrouterLogFailure.h"
 #include "mcrouter/McrouterLogger.h"
 #include "mcrouter/Proxy.h"
@@ -49,27 +46,27 @@ class McrouterManager {
 
   template <class RouterInfo>
   CarbonRouterInstance<RouterInfo>* mcrouterGetCreate(
-      folly::StringPiece persistence_id,
+      folly::StringPiece persistenceId,
       const McrouterOptions& options,
       const std::vector<folly::EventBase*>& evbs) {
     std::shared_ptr<CarbonRouterInstanceBase> mcrouterBase;
 
     {
       std::lock_guard<std::mutex> lg(mutex_);
-      mcrouterBase = folly::get_default(mcrouters_, persistence_id.str());
+      mcrouterBase = folly::get_default(mcrouters_, persistenceId.str());
     }
     if (!mcrouterBase) {
       std::lock_guard<std::mutex> ilg(initMutex_);
       {
         std::lock_guard<std::mutex> lg(mutex_);
-        mcrouterBase = folly::get_default(mcrouters_, persistence_id.str());
+        mcrouterBase = folly::get_default(mcrouters_, persistenceId.str());
       }
       if (!mcrouterBase) {
         std::shared_ptr<CarbonRouterInstance<RouterInfo>> mcrouter =
             CarbonRouterInstance<RouterInfo>::create(options.clone(), evbs);
         if (mcrouter) {
           std::lock_guard<std::mutex> lg(mutex_);
-          mcrouters_[persistence_id.str()] = mcrouter;
+          mcrouters_[persistenceId.str()] = mcrouter;
           return mcrouter.get();
         }
       }
@@ -79,10 +76,10 @@ class McrouterManager {
 
   template <class RouterInfo>
   CarbonRouterInstance<RouterInfo>* mcrouterGet(
-      folly::StringPiece persistence_id) {
+      folly::StringPiece persistenceId) {
     std::lock_guard<std::mutex> lg(mutex_);
     auto mcrouterBase =
-        folly::get_default(mcrouters_, persistence_id.str(), nullptr).get();
+        folly::get_default(mcrouters_, persistenceId.str(), nullptr).get();
     return dynamic_cast<CarbonRouterInstance<RouterInfo>*>(mcrouterBase);
   }
 
@@ -97,17 +94,16 @@ class McrouterManager {
 
 extern folly::Singleton<McrouterManager> gMcrouterManager;
 
-} // detail
+} // namespace detail
 
 template <class RouterInfo>
 /* static  */ CarbonRouterInstance<RouterInfo>*
 CarbonRouterInstance<RouterInfo>::init(
-    folly::StringPiece persistence_id,
+    folly::StringPiece persistenceId,
     const McrouterOptions& options,
     const std::vector<folly::EventBase*>& evbs) {
   if (auto manager = detail::gMcrouterManager.try_get()) {
-    return manager->mcrouterGetCreate<RouterInfo>(
-        persistence_id, options, evbs);
+    return manager->mcrouterGetCreate<RouterInfo>(persistenceId, options, evbs);
   }
 
   return nullptr;
@@ -115,12 +111,18 @@ CarbonRouterInstance<RouterInfo>::init(
 
 template <class RouterInfo>
 CarbonRouterInstance<RouterInfo>* CarbonRouterInstance<RouterInfo>::get(
-    folly::StringPiece persistence_id) {
+    folly::StringPiece persistenceId) {
   if (auto manager = detail::gMcrouterManager.try_get()) {
-    return manager->mcrouterGet<RouterInfo>(persistence_id);
+    return manager->mcrouterGet<RouterInfo>(persistenceId);
   }
 
   return nullptr;
+}
+
+template <class RouterInfo>
+bool CarbonRouterInstance<RouterInfo>::hasInstance(
+    folly::StringPiece persistenceId) {
+  return get(persistenceId) != nullptr;
 }
 
 template <class RouterInfo>
@@ -394,20 +396,10 @@ void CarbonRouterInstance<RouterInfo>::spawnAuxiliaryThreads() {
   configApi_->startObserving();
   subscribeToConfigUpdate();
 
-  startAwriterThreads();
   startObservingRuntimeVarsFile();
   registerOnUpdateCallbackForRxmits();
   registerForStatsUpdates();
   spawnStatLoggerThread();
-}
-
-template <class RouterInfo>
-void CarbonRouterInstance<RouterInfo>::startAwriterThreads() {
-  if (!opts_.asynclog_disable) {
-    if (!asyncWriter_->start("mcrtr-awriter")) {
-      throw std::runtime_error("failed to spawn mcrouter awriter thread");
-    }
-  }
 }
 
 template <class RouterInfo>
@@ -435,12 +427,19 @@ void CarbonRouterInstance<RouterInfo>::startObservingRuntimeVarsFile() {
     return;
   }
 
-  startObservingFile(
-      opts_.runtime_vars_file,
-      *evbAuxiliaryThread_.getEventBase(),
-      opts_.file_observer_poll_period_ms,
-      opts_.file_observer_sleep_before_update_ms,
-      std::move(onUpdate));
+  if (auto scheduler = functionScheduler()) {
+    runtimeVarsObserverHandle_ = startObservingFile(
+        opts_.runtime_vars_file,
+        scheduler,
+        std::chrono::milliseconds(opts_.file_observer_poll_period_ms),
+        std::chrono::milliseconds(opts_.file_observer_sleep_before_update_ms),
+        std::move(onUpdate));
+  } else {
+    MC_LOG_FAILURE(
+        opts(),
+        failure::Category::kSystemError,
+        "Global function scheduler not available");
+  }
 }
 
 template <class RouterInfo>
@@ -463,14 +462,7 @@ void CarbonRouterInstance<RouterInfo>::joinAuxiliaryThreads() noexcept {
     mcrouterLogger_->stop();
   }
 
-  stopAwriterThreads();
-
-  evbAuxiliaryThread_.stop();
-}
-
-template <class RouterInfo>
-void CarbonRouterInstance<RouterInfo>::stopAwriterThreads() noexcept {
-  asyncWriter_->stop();
+  runtimeVarsObserverHandle_.reset();
 }
 
 template <class RouterInfo>

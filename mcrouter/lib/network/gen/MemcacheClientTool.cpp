@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -14,6 +12,7 @@
  *
  *  @generated
  */
+#include <folly/init/Init.h>
 
 #include <mcrouter/lib/carbon/CmdLineClient.h>
 #include <mcrouter/lib/carbon/JsonClient.h>
@@ -128,11 +127,12 @@ class MemcacheJsonClient : public JsonClient {
     return false;
   }
 };
-
 } // anonymous namespace
 
-int main(int argc, const char** argv) {
+int main(int argc, char** argv) {
+  int tmpArgc = 1;
+  folly::init(&tmpArgc, &argv, /* removeFlags */ false);
   CmdLineClient client;
-  client.sendRequests<MemcacheJsonClient>(argc, argv);
+  client.sendRequests<MemcacheJsonClient>(argc, const_cast<const char**>(argv));
   return 0;
 }

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ServerLoad.h"
@@ -17,14 +15,13 @@ namespace memcache {
 namespace {
 
 // Constant used to convert from raw load to percent load.
-constexpr uint32_t kPercentLoadNormalizer = 10e4; // 10,000
+constexpr uint32_t kPercentLoadNormalizer = 1e4; // 10,000
 constexpr uint32_t kMaxRawLoad = kPercentLoadNormalizer * 100;
 
 } // anonymous namespace
 
-ServerLoad::ServerLoad(uint32_t rawLoad) noexcept : load_(rawLoad) {
-  assert(load_ <= kMaxRawLoad);
-}
+ServerLoad::ServerLoad(uint32_t rawLoad) noexcept
+    : load_(rawLoad > kMaxRawLoad ? 0 : rawLoad) {}
 
 /* static */
 ServerLoad ServerLoad::fromPercentLoad(double percentLoad) noexcept {
@@ -53,6 +50,10 @@ const ServerLoad ServerLoad::zero() noexcept {
 
 double ServerLoad::percentLoad() const noexcept {
   return static_cast<double>(load_) / kPercentLoadNormalizer;
+}
+
+ServerLoad ServerLoad::complement() const noexcept {
+  return ServerLoad(kMaxRawLoad - load_);
 }
 
 } // memcache

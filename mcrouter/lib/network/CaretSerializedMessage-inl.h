@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "mcrouter/lib/network/CarbonMessageDispatcher.h"
@@ -18,6 +16,7 @@ bool CaretSerializedMessage::prepare(
     const Request& req,
     size_t reqId,
     const CodecIdRange& supportedCodecs,
+    size_t passThroughKey,
     const struct iovec*& iovOut,
     size_t& niovOut) noexcept {
   return fill(
@@ -26,6 +25,7 @@ bool CaretSerializedMessage::prepare(
       Request::typeId,
       req.traceToInts(),
       supportedCodecs,
+      passThroughKey,
       iovOut,
       niovOut);
 }
@@ -53,24 +53,26 @@ bool CaretSerializedMessage::prepare(
       niovOut);
 }
 
-template <class Message>
+template <class Request>
 bool CaretSerializedMessage::fill(
-    const Message& message,
+    const Request& message,
     uint32_t reqId,
     size_t typeId,
     std::pair<uint64_t, uint64_t> traceId,
     const CodecIdRange& supportedCodecs,
+    size_t passThroughKey,
     const struct iovec*& iovOut,
     size_t& niovOut) {
   // Serialize body into storage_. Note we must defer serialization of header.
   try {
-    serializeCarbonStruct(message, storage_);
+    serializeCarbonRequest(message, storage_);
   } catch (const std::exception& e) {
     LOG(ERROR) << "Failed to serialize: " << e.what();
     return false;
   }
 
   UmbrellaMessageInfo info;
+  info.passThroughKey = passThroughKey;
   if (!supportedCodecs.isEmpty()) {
     info.supportedCodecsFirstId = supportedCodecs.firstId;
     info.supportedCodecsSize = supportedCodecs.size;
@@ -80,9 +82,9 @@ bool CaretSerializedMessage::fill(
   return true;
 }
 
-template <class Message>
+template <class Reply>
 bool CaretSerializedMessage::fill(
-    const Message& message,
+    const Reply& message,
     uint32_t reqId,
     size_t typeId,
     std::pair<uint64_t, uint64_t> traceId,
@@ -140,8 +142,7 @@ inline bool CaretSerializedMessage::maybeCompress(
   static constexpr size_t kCompressionOverhead = 4;
   try {
     const auto iovs = storage_.getIovecs();
-    // The first iovec is the header - we need to compress just the data.
-    auto compressedBuf = codec->compress(iovs.first + 1, iovs.second - 1);
+    auto compressedBuf = codec->compress(iovs.first, iovs.second);
     auto compressedSize = compressedBuf->computeChainDataLength();
     if ((compressedSize + kCompressionOverhead) < uncompressedSize) {
       storage_.reset();

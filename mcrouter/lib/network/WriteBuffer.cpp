@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <folly/Conv.h>
@@ -24,6 +22,10 @@ WriteBuffer::WriteBuffer(mc_protocol_t protocol) : protocol_(protocol) {
       new (&asciiReply_) AsciiSerializedReply;
       break;
 
+    case mc_binary_protocol:
+      new (&binaryReply_) BinarySerializedReply;
+      break;
+
     case mc_umbrella_protocol_DONOTUSE:
       new (&umbrellaReply_) UmbrellaSerializedMessage;
       break;
@@ -41,6 +43,10 @@ WriteBuffer::~WriteBuffer() {
   switch (protocol_) {
     case mc_ascii_protocol:
       asciiReply_.~AsciiSerializedReply();
+      break;
+
+    case mc_binary_protocol:
+      binaryReply_.~BinarySerializedReply();
       break;
 
     case mc_umbrella_protocol_DONOTUSE:
@@ -65,6 +71,10 @@ void WriteBuffer::clear() {
   switch (protocol_) {
     case mc_ascii_protocol:
       asciiReply_.clear();
+      break;
+
+    case mc_binary_protocol:
+      binaryReply_.clear();
       break;
 
     case mc_umbrella_protocol_DONOTUSE:

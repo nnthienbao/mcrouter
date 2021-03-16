@@ -5,6 +5,8 @@ noinst_LIBRARIES = libmcrouter.a
 libmcrouter_a_SOURCES = \
   AuxiliaryCPUThreadPool.h \
   AuxiliaryCPUThreadPool.cpp \
+  AuxiliaryIOThreadPool.h \
+  AuxiliaryIOThreadPool.cpp \
   CacheClientStats.h \
   Ch3HashFunc.h \
   Clocks.cpp \
@@ -14,8 +16,10 @@ libmcrouter_a_SOURCES = \
   CompressionCodecManager.cpp \
   CompressionCodecManager.h \
   Crc32HashFunc.h \
-  FailoverErrorsSettings.cpp \
+  FailoverErrorsSettingsBase.cpp \
+  FailoverErrorsSettingsBase.h \
   FailoverErrorsSettings.h \
+  HashUtil.h \
   IOBufUtil.cpp \
   IOBufUtil.h \
   IovecCursor-inl.h \
@@ -36,6 +40,8 @@ libmcrouter_a_SOURCES = \
   Operation.h \
   OperationTraits.h \
   Ref.h \
+  RendezvousHashFunc.cpp \
+  RendezvousHashFunc.h \
   Reply.h \
   RouteHandleTraverser.h \
   SelectionRouteFactory.h \
@@ -43,6 +49,8 @@ libmcrouter_a_SOURCES = \
   StatsReply.h \
   WeightedCh3HashFunc.cpp \
   WeightedCh3HashFunc.h \
+  WeightedRendezvousHashFunc.cpp \
+  WeightedRendezvousHashFunc.h \
   ZstdCompressionCodec.cpp \
   ZstdCompressionCodec.h \
   carbon/Fields.h \
@@ -109,7 +117,7 @@ libmcrouter_a_SOURCES = \
   fbi/sfrlock.h \
   fbi/time.h \
   fbi/util.h \
-  mc/msg.c \
+  mc/msg.cpp \
   mc/msg.h \
   mc/protocol.h \
   mc/umbrella.c \
@@ -156,6 +164,8 @@ libmcrouter_a_SOURCES = \
   network/McAsciiParser-inl.h \
   network/McAsciiParser.cpp \
   network/McAsciiParser.h \
+  network/McBinaryParser.cpp \
+  network/McBinaryParser.h \
   network/McClientRequestContext-inl.h \
   network/McClientRequestContext.cpp \
   network/McClientRequestContext.h \
@@ -168,15 +178,21 @@ libmcrouter_a_SOURCES = \
   network/McServerRequestContext.h \
   network/McServerSession.cpp \
   network/McServerSession.h \
+  network/McSSLUtil.cpp \
+  network/McSSLUtil.h \
   network/MemcacheMessageHelpers.h \
   network/MemoryController.cpp \
   network/MemoryController.h \
   network/MultiOpParent.cpp \
   network/MultiOpParent.h \
+  network/SecurityMech.cpp \
+  network/SecurityMech.h \
   network/ServerLoad.cpp \
   network/ServerLoad.h \
   network/ServerMcParser-inl.h \
   network/ServerMcParser.h \
+  network/SocketConnector.cpp \
+  network/SocketConnector.h \
   network/ThreadLocalSSLContextProvider.cpp \
   network/ThreadLocalSSLContextProvider.h \
   network/UmbrellaProtocol.cpp \
@@ -189,7 +205,8 @@ libmcrouter_a_SOURCES = \
   routes/AllInitialRoute.h \
   routes/AllMajorityRoute.h \
   routes/AllSyncRoute.h \
-  routes/ErrorRoute.h \
+  routes/CarbonLookasideRoute.h \
+  routes/LoadBalancerRoute.h \
   routes/LoggingRoute.h \
   routes/MigrateRoute.h \
   routes/NullRoute.h \
@@ -205,4 +222,4 @@ check_PROGRAMS =
 
 libtestmain_la_CPPFLAGS = -Igtest/include -Igtest
 libtestmain_la_SOURCES = TestMain.cpp gtest/src/gtest-all.cc
-libtestmain_la_LIBADD = -lfolly -lfollyinit
+libtestmain_la_LIBADD = -lfolly

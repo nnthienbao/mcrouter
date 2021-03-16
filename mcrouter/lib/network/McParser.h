@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -27,6 +25,9 @@ inline mc_protocol_t determineProtocol(uint8_t firstByte) {
       return mc_caret_protocol;
     case ENTRY_LIST_MAGIC_BYTE:
       return mc_umbrella_protocol_DONOTUSE;
+    case 0x80:
+    case 0x81:
+      return mc_binary_protocol;
     default:
       return mc_ascii_protocol;
   }
@@ -71,6 +72,14 @@ class McParser {
      * @param readBuffer  buffer with newly read data that needs to be parsed.
      */
     virtual void handleAscii(folly::IOBuf& readBuffer) = 0;
+
+    /**
+     * Handle binary data read.
+     * The user is responsible for clearing or advancing the readBuffer.
+     *
+     * @param readBuffer  buffer with newly read data that needs to be parsed.
+     */
+    virtual void handleBinary(folly::IOBuf& readBuffer) = 0;
 
     /**
      * Called on fatal parse error (the stream should normally be closed)

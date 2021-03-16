@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -27,7 +25,6 @@
 #include <folly/concurrency/CacheLocality.h>
 
 #include "mcrouter/ExponentialSmoothData.h"
-#include "mcrouter/Observable.h"
 #include "mcrouter/ProxyBase.h"
 #include "mcrouter/ProxyRequestPriority.h"
 #include "mcrouter/config.h"
@@ -62,85 +59,7 @@ class ProxyDestination;
 class ProxyRequestContext;
 template <class RouterInfo, class Request>
 class ProxyRequestContextTyped;
-class RuntimeVarsData;
 class ShardSplitter;
-
-using ObservableRuntimeVars =
-    Observable<std::shared_ptr<const RuntimeVarsData>>;
-
-struct ShadowSettings {
-  /**
-   * @return  nullptr if config is invalid, new ShadowSettings struct otherwise
-   */
-  static std::shared_ptr<ShadowSettings> create(
-      const folly::dynamic& json,
-      CarbonRouterInstanceBase& router);
-
-  ~ShadowSettings();
-
-  const std::string& keyFractionRangeRv() const {
-    return keyFractionRangeRv_;
-  }
-
-  size_t startIndex() const {
-    return startIndex_;
-  }
-
-  size_t endIndex() const {
-    return endIndex_;
-  }
-
-  bool validateRepliesFlag() const {
-    return validateReplies_;
-  }
-
-  // [start, end] where 0 <= start <= end <= numeric_limits<uint32_t>::max()
-  std::pair<uint32_t, uint32_t> keyRange() const {
-    auto fraction = keyRange_.load();
-    return {fraction >> 32, fraction & ((1UL << 32) - 1)};
-  }
-
-  /**
-   * @throws std::logic_error if !(0 <= start <= end <= 1)
-   */
-  void setKeyRange(double start, double end);
-
-  /**
-   * Specify a list of keys to be shadowed. Cannot be mixed with index range/key
-   * fraction range-based shadowing.
-   */
-  void setKeysToShadow(const std::vector<std::string>& keys) {
-    keysToShadow_.clear();
-    for (const auto& key : keys) {
-      const auto hash = carbon::Keys<std::string>(key).routingKeyHash();
-      keysToShadow_.emplace_back(hash, key);
-    }
-    std::sort(keysToShadow_.begin(), keysToShadow_.end());
-  }
-
-  const std::vector<std::tuple<uint32_t, std::string>>& keysToShadow() const {
-    return keysToShadow_;
-  }
-
- private:
-  ObservableRuntimeVars::CallbackHandle handle_;
-  void registerOnUpdateCallback(CarbonRouterInstanceBase& router);
-
-  std::string keyFractionRangeRv_;
-  size_t startIndex_{0};
-  size_t endIndex_{0};
-
-  // Ideally, this would just be an unordered set<Key<string>>, but we need to
-  // allow for comparing to Key<IOBuf>. We can work with a vector<Key<string>>
-  // sorted by routingKeyHash.
-  std::vector<std::tuple<uint32_t, std::string>> keysToShadow_;
-
-  std::atomic<uint64_t> keyRange_{0};
-
-  bool validateReplies_{false};
-
-  ShadowSettings() = default;
-};
 
 struct ProxyMessage {
   enum class Type { REQUEST, OLD_CONFIG, SHUTDOWN };
@@ -236,37 +155,42 @@ class Proxy : public ProxyBase {
 
   void messageReady(ProxyMessage::Type t, void* data);
 
-  /** Process and reply stats request */
+  // Add task to route request through route handle tree
+  template <class Request>
+  typename std::enable_if_t<
+      ListContains<typename RouterInfo::RoutableRequests, Request>::value>
+  addRouteTask(
+      const Request& req,
+      std::shared_ptr<ProxyRequestContextTyped<RouterInfo, Request>> sharedCtx);
+  // Fail all unknown operations
+  template <class Request>
+  typename std::enable_if_t<
+      !ListContains<typename RouterInfo::RoutableRequests, Request>::value>
+  addRouteTask(
+      const Request& req,
+      std::shared_ptr<ProxyRequestContextTyped<RouterInfo, Request>> sharedCtx);
+
+  // Process and reply stats request
   void routeHandlesProcessRequest(
       const McStatsRequest& req,
       std::unique_ptr<ProxyRequestContextTyped<RouterInfo, McStatsRequest>>
           ctx);
-
-  /** Process and reply to a version request */
+  // Process and reply to a version request
   void routeHandlesProcessRequest(
       const McVersionRequest& req,
       std::unique_ptr<ProxyRequestContextTyped<RouterInfo, McVersionRequest>>
           ctx);
-
-  /** Route request through route handle tree */
+  // Process and reply to a get request
+  void routeHandlesProcessRequest(
+      const McGetRequest& req,
+      std::unique_ptr<ProxyRequestContextTyped<RouterInfo, McGetRequest>> ctx);
+  // Route request through route handle tree
   template <class Request>
-  typename std::enable_if<
-      ListContains<typename RouterInfo::RoutableRequests, Request>::value,
-      void>::type
-  routeHandlesProcessRequest(
+  void routeHandlesProcessRequest(
       const Request& req,
       std::unique_ptr<ProxyRequestContextTyped<RouterInfo, Request>> ctx);
 
-  /** Fail all unknown operations */
-  template <class Request>
-  typename std::enable_if<
-      !ListContains<typename RouterInfo::RoutableRequests, Request>::value,
-      void>::type
-  routeHandlesProcessRequest(
-      const Request& req,
-      std::unique_ptr<ProxyRequestContextTyped<RouterInfo, Request>> ctx);
-
-  /** Process request (update stats and route the request) */
+  // Process request (update stats and route the request)
   template <class Request>
   void processRequest(
       const Request& req,
@@ -350,8 +274,9 @@ template <class RouterInfo>
 void proxy_config_swap(
     Proxy<RouterInfo>* proxy,
     std::shared_ptr<ProxyConfig<RouterInfo>> config);
-}
-}
-} // facebook::memcache::mcrouter
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook
 
 #include "Proxy-inl.h"

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -24,6 +22,7 @@
 #include "mcrouter/lib/routes/AllSyncRoute.h"
 #include "mcrouter/routes/BigValueRouteIf.h"
 #include "mcrouter/routes/RouteSelectorMap.h"
+#include "mcrouter/stats.h"
 
 namespace facebook {
 namespace memcache {
@@ -43,7 +42,7 @@ class ProxyRoute {
   }
 
   ProxyRoute(
-      Proxy<RouterInfo>* proxy,
+      Proxy<RouterInfo>& proxy,
       const RouteSelectorMap<typename RouterInfo::RouteHandleIf>&
           routeSelectors);
 
@@ -61,6 +60,10 @@ class ProxyRoute {
     auto& requestContext = fiber_local<RouterInfo>::getSharedCtx();
     requestContext->setFinalResult(reply.result());
 
+    if (isErrorResult(reply.result())) {
+      proxy_.stats().increment(final_result_error_stat);
+    }
+
     return reply;
   }
 
@@ -72,7 +75,7 @@ class ProxyRoute {
   }
 
  private:
-  Proxy<RouterInfo>* proxy_;
+  Proxy<RouterInfo>& proxy_;
   std::shared_ptr<typename RouterInfo::RouteHandleIf> root_;
 
   std::vector<std::shared_ptr<typename RouterInfo::RouteHandleIf>>

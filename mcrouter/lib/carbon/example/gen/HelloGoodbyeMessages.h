@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -62,7 +60,15 @@ class HelloRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
+  }
+  uint64_t shardId() const {
+    return shardId_;
+  }
+  uint64_t& shardId() {
+    markBufferAsDirty();
+    return shardId_;
   }
   uint64_t flags() const {
     return 0;
@@ -82,6 +88,7 @@ class HelloRequest : public carbon::RequestCommon {
 
  private:
   carbon::Keys<folly::IOBuf> key_;
+  uint64_t shardId_{0};
 };
 
 class HelloReply : public carbon::ReplyCommon {
@@ -150,7 +157,15 @@ class GoodbyeRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
+  }
+  uint64_t shardId() const {
+    return shardId_;
+  }
+  uint64_t& shardId() {
+    markBufferAsDirty();
+    return shardId_;
   }
   uint64_t flags() const {
     return 0;
@@ -170,6 +185,7 @@ class GoodbyeRequest : public carbon::RequestCommon {
 
  private:
   carbon::Keys<folly::IOBuf> key_;
+  uint64_t shardId_{0};
 };
 
 class GoodbyeReply : public carbon::ReplyCommon {
@@ -219,7 +235,6 @@ class GoodbyeReply : public carbon::ReplyCommon {
   std::string message_;
   carbon::Result result_{mc_res_unknown};
 };
-
-} // hellogoodbye
+} // namespace hellogoodbye
 
 #include "HelloGoodbyeMessages-inl.h"

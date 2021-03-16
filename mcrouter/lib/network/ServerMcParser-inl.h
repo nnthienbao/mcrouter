@@ -1,13 +1,11 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
-#include <folly/Bits.h>
+#include <folly/lang/Bits.h>
 
 #include "mcrouter/lib/debug/ConnectionFifo.h"
 #include "mcrouter/lib/network/UmbrellaProtocol.h"
@@ -132,6 +130,26 @@ void ServerMcParser<Callback>::handleAscii(folly::IOBuf& readBuffer) {
   auto result = asciiParser_.consume(readBuffer);
 
   if (result == McAsciiParserBase::State::ERROR) {
+    // Note: we could include actual parsing error instead of
+    // "malformed request" (e.g. asciiParser_.getErrorDescription()).
+    callback_.parseError(mc_res_client_error, "malformed request");
+  }
+}
+
+template <class Callback>
+void ServerMcParser<Callback>::handleBinary(folly::IOBuf& readBuffer) {
+  if (UNLIKELY(parser_.protocol() != mc_binary_protocol)) {
+    std::string reason(folly::sformat(
+        "Expected {} protocol, but received binary!",
+        mc_protocol_to_string(parser_.protocol())));
+    callback_.parseError(mc_res_local_error, reason);
+    return;
+  }
+
+  // Note: McParser never chains IOBufs.
+  auto result = binaryParser_.consume(readBuffer);
+
+  if (result == McServerBinaryParser::State::ERROR) {
     // Note: we could include actual parsing error instead of
     // "malformed request" (e.g. asciiParser_.getErrorDescription()).
     callback_.parseError(mc_res_client_error, "malformed request");

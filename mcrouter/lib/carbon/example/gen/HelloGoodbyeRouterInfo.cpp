@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -31,11 +29,13 @@
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
 #include <mcrouter/routes/DevNullRoute.h>
-#include <mcrouter/routes/ErrorRouteFactory.h>
+#include <mcrouter/routes/ErrorRoute.h>
 #include <mcrouter/routes/FailoverRoute.h>
 #include <mcrouter/routes/HashRouteFactory.h>
 #include <mcrouter/routes/HostIdRouteFactory.h>
+#include <mcrouter/routes/LatencyInjectionRoute.h>
 #include <mcrouter/routes/LatestRoute.h>
+#include <mcrouter/routes/LoadBalancerRoute.h>
 #include <mcrouter/routes/LoggingRoute.h>
 #include <mcrouter/routes/MigrateRouteFactory.h>
 #include <mcrouter/routes/MissFailoverRoute.h>
@@ -46,6 +46,7 @@
 
 #include <mcrouter/routes/McExtraRouteHandleProvider.h>
 
+#include "mcrouter/lib/carbon/example/CarbonLookasideRoute.h"
 #include "mcrouter/lib/carbon/example/DuplicateRoute.h"
 
 using namespace facebook::memcache;
@@ -69,7 +70,10 @@ HelloGoodbyeRouterInfo::buildRouteMap() {
          return makeHashRoute<HelloGoodbyeRouterInfo>(factory, json);
        }},
       {"HostIdRoute", &makeHostIdRoute<HelloGoodbyeRouterInfo>},
+      {"LatencyInjectionRoute",
+       &makeLatencyInjectionRoute<HelloGoodbyeRouterInfo>},
       {"LatestRoute", &makeLatestRoute<HelloGoodbyeRouterInfo>},
+      {"LoadBalancerRoute", &makeLoadBalancerRoute<HelloGoodbyeRouterInfo>},
       {"LoggingRoute", &makeLoggingRoute<HelloGoodbyeRouterInfo>},
       {"MigrateRoute", &makeMigrateRoute<HelloGoodbyeRouterInfo>},
       {"MissFailoverRoute", &makeMissFailoverRoute<HelloGoodbyeRouterInfo>},
@@ -79,6 +83,8 @@ HelloGoodbyeRouterInfo::buildRouteMap() {
        &makeOperationSelectorRoute<HelloGoodbyeRouterInfo>},
       {"RandomRoute", &makeRandomRoute<HelloGoodbyeRouterInfo>},
       {"DuplicateRoute", &makeDuplicateRoute<HelloGoodbyeRouterInfo>},
+      {"CarbonLookasideRoute",
+       &makeCarbonLookasideRoute<HelloGoodbyeRouterInfo>},
   };
   return map;
 }
@@ -88,5 +94,4 @@ std::unique_ptr<ExtraRouteHandleProviderIf<HelloGoodbyeRouterInfo>>
 HelloGoodbyeRouterInfo::buildExtraProvider() {
   return std::make_unique<McExtraRouteHandleProvider<HelloGoodbyeRouterInfo>>();
 }
-
-} // hellogoodbye
+} // namespace hellogoodbye

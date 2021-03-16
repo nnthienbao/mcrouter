@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 // @nolint
@@ -226,6 +224,15 @@ MCROUTER_OPTION_INTEGER(
     "set TCP KEEPALIVE idle parameter in seconds")
 
 MCROUTER_OPTION_INTEGER(
+    int,
+    max_no_flush_event_loops,
+    5,
+    "max-no-flush-event-loops",
+    no_short,
+    "Maximum number of non-blocking event loops before we flush batched "
+    "requests")
+
+MCROUTER_OPTION_INTEGER(
     unsigned int,
     reset_inactive_connection_interval,
     60000,
@@ -296,24 +303,31 @@ MCROUTER_OPTION_INTEGER(
 
 MCROUTER_OPTION_STRING(
     pem_cert_path,
-    "",
+    "",  // this may get overwritten by finalizeOptions
     "pem-cert-path",
     no_short,
-    "Path of pem-style certificate for ssl")
+    "Path of pem-style client certificate for ssl.")
 
 MCROUTER_OPTION_STRING(
     pem_key_path,
-    "",
+    "",  // this may get overwritten by finalizeOptions
     "pem-key-path",
     no_short,
-    "Path of pem-style key for ssl")
+    "Path of pem-style client key for ssl.")
 
 MCROUTER_OPTION_STRING(
     pem_ca_path,
-    "",
+    MCROUTER_DEFAULT_CA_PATH,
     "pem-ca-path",
     no_short,
     "Path of pem-style CA cert for ssl")
+
+MCROUTER_OPTION_STRING(
+    ssl_service_identity,
+    "",
+    "ssl-service-identity",
+    no_short,
+    "The service identity of the destination service when SSL is used")
 
 MCROUTER_OPTION_TOGGLE(
     enable_qos,
@@ -350,6 +364,20 @@ MCROUTER_OPTION_TOGGLE(
     "ssl-connection-cache",
     no_short,
     "If enabled, limited number of SSL sessions will be cached")
+
+MCROUTER_OPTION_TOGGLE(
+    ssl_handshake_offload,
+    false,
+    "ssl-handshake-offload",
+    no_short,
+    "If enabled, SSL handshakes are offloaded to a separate threadpool")
+
+MCROUTER_OPTION_TOGGLE(
+    ssl_verify_peers,
+    false,
+    "ssl-verify-peers",
+    no_short,
+    "If enabled, clients will verify server certificates.")
 
 MCROUTER_OPTION_TOGGLE(
     enable_compression,
@@ -411,6 +439,13 @@ MCROUTER_OPTION_STRING(
     " --config option is used.")
 
 MCROUTER_OPTION_STRING(
+    pool_stats_config_file,
+    "",
+    "pool-stats-config-file",
+    no_short,
+    "File containing stats enabled pool names.")
+
+MCROUTER_OPTION_STRING(
     config_str,
     "",
     "config-str",
@@ -464,6 +499,14 @@ MCROUTER_OPTION_INTEGER(
     no_short,
     "Delay between config files change and mcrouter reconfiguration.")
 
+MCROUTER_OPTION_INTEGER(
+    int,
+    post_reconfiguration_delay_ms,
+    0,
+    "post-reconfiguration-delay-ms",
+    no_short,
+    "Delay after a reconfiguration is complete.")
+
 MCROUTER_OPTION_STRING_MAP(
     config_params,
     "config-params",
@@ -505,15 +548,6 @@ MCROUTER_OPTION_INTEGER(
     "timeouts-until-tko",
     no_short,
     "Mark as TKO after this many failures")
-
-MCROUTER_OPTION_INTEGER(
-    size_t,
-    maximum_soft_tkos,
-    40,
-    "maximum-soft-tkos",
-    no_short,
-    "The maximum number of machines we can mark TKO if they don't have a hard"
-    " failure.")
 
 MCROUTER_OPTION_TOGGLE(
     allow_only_gets,
@@ -651,8 +685,19 @@ MCROUTER_OPTION_INTEGER(
     0,
     "collect-rxmit-stats-every-hz",
     no_short,
-    "Will calculate retransmits per kB after every set cycles."
+    "Will calculate retransmits per kB after every set cycles whenever a "
+    "timeout or deviation from average latency occurs."
     " If value is 0, calculation won't be done.")
+
+MCROUTER_OPTION_INTEGER(
+    uint64_t,
+    rxmit_latency_deviation_us,
+    0,
+    "rxmit-latency-deviation-us",
+    no_short,
+    "Latency deviation of request in microseconds from the average latency on "
+    "the connection will trigger recalculation of retransmits per kB. "
+    "If value is 0, calculation won't be done.")
 
 MCROUTER_OPTION_INTEGER(
     uint64_t,
@@ -691,8 +736,32 @@ MCROUTER_OPTION_TOGGLE(
     true,
     "disable-send-to-main-shard-split",
     no_short,
-    "Whether ShardSplitRoute sends certain requests only to the main shard"
-    " split. Enabled by default.")
+    "DEPRECATED. No longer supported/needed")
+
+MCROUTER_OPTION_INTEGER(
+    size_t,
+    max_shadow_token_map_size,
+    1024,
+    "max-shadow-token-map-size",
+    no_short,
+    "Maximum size of LRU cache mapping normal lease tokens to shadow lease"
+    " tokens. High rates of shadowing of lease operations may require a limit"
+    " higher than the default. 0 disables limiting of map size.")
+
+MCROUTER_OPTION_TOGGLE(
+    enable_ssl_tfo,
+    false,
+    "enable-ssl-tfo",
+    no_short,
+    "enable TFO when connecting/accepting via SSL")
+
+MCROUTER_OPTION_TOGGLE(
+    use_server_index_as_pass_through_key,
+    false,
+    "use-server-index-as-pass-through-key",
+    no_short,
+    "Enable using the server index as the pass through key additional field. "
+    "The server index will be 1-based.")
 
 #ifdef ADDITIONAL_OPTIONS_FILE
 #include ADDITIONAL_OPTIONS_FILE

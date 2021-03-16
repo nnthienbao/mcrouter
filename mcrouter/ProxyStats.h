@@ -1,17 +1,18 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
 #include <mutex>
 
+#include <folly/experimental/StringKeyedUnorderedMap.h>
+
 #include "mcrouter/ExponentialSmoothData.h"
+#include "mcrouter/PoolStats.h"
 #include "mcrouter/stats.h"
 
 namespace facebook {
@@ -20,7 +21,7 @@ namespace mcrouter {
 
 class ProxyStats {
  public:
-  ProxyStats();
+  explicit ProxyStats(const std::vector<std::string>& statsEnabledPools);
 
   /**
    * Aggregate proxy stat with the given index.
@@ -37,6 +38,22 @@ class ProxyStats {
 
   ExponentialSmoothData<64>& durationUs() {
     return durationUs_;
+  }
+
+  ExponentialSmoothData<64>& durationGetUs() {
+    return durationGetUs_;
+  }
+
+  ExponentialSmoothData<64>& durationUpdateUs() {
+    return durationUpdateUs_;
+  }
+
+  /**
+   * Tells the interval (in seconds) between closing a connection due to lack
+   * of activity and opening it again.
+   */
+  ExponentialSmoothData<64>& inactiveConnectionClosedIntervalSec() {
+    return inactiveConnectionClosedIntervalSec_;
   }
 
   size_t numBinsUsed() const {
@@ -131,11 +148,44 @@ class ProxyStats {
     return stats_[statId];
   }
 
+  folly::StringKeyedUnorderedMap<stat_t> getAggregatedPoolStatsMap() const {
+    folly::StringKeyedUnorderedMap<stat_t> poolStatsMap;
+    for (const auto& poolStats : poolStats_) {
+      for (const auto& stat : poolStats.getStats()) {
+        poolStatsMap.emplace(stat.name, stat);
+      }
+    }
+    return poolStatsMap;
+  }
+
+  /**
+   * Returns pointer to the entry corresponding to the idx in
+   * the poolStats vector. If the idx is invalid, nullptr is returned
+   *
+   * @param  idx
+   * @return pointer to poolStats vector entry
+   *         nullptr if idx is invalid
+   */
+  PoolStats* getPoolStats(int32_t idx) {
+    if (idx < 0 || static_cast<size_t>(idx) >= poolStats_.size()) {
+      return nullptr;
+    }
+    return &poolStats_[idx];
+  }
+
  private:
   mutable std::mutex mutex_;
   stat_t stats_[num_stats]{};
+  // vector of the PoolStats
+  std::vector<PoolStats> poolStats_;
 
   ExponentialSmoothData<64> durationUs_;
+  // Duration microseconds, broken down by get-like request type
+  ExponentialSmoothData<64> durationGetUs_;
+  // Duration microseconds, broken down by update-like request type
+  ExponentialSmoothData<64> durationUpdateUs_;
+
+  ExponentialSmoothData<64> inactiveConnectionClosedIntervalSec_;
 
   // we are wasting some memory here to get faster mapping from stat name to
   // statsBin_[] and statsNumWithinWindow_[] entry. i.e., the statsBin_[]
@@ -171,6 +221,7 @@ class ProxyStats {
    */
   size_t numBinsUsed_{0};
 };
-}
-}
-} // facebook::memcache::mcrouter
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

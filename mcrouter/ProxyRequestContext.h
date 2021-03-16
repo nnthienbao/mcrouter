@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -89,6 +87,12 @@ class ProxyRequestContext {
     return failoverDisabled_;
   }
 
+  void setPoolStatsIndex(int32_t index) {
+    if (poolStatIndex_ == -1) {
+      poolStatIndex_ = index;
+    }
+  }
+
   ProxyRequestPriority priority() const {
     return priority_;
   }
@@ -138,6 +142,7 @@ class ProxyRequestContext {
    */
   void (*reqComplete_)(ProxyRequestContext& preq){nullptr};
   mc_res_t finalResult_{mc_res_unknown};
+  int32_t poolStatIndex_{-1};
   bool replied_{false};
 
   ProxyRequestContext(ProxyBase& pr, ProxyRequestPriority priority__);

@@ -11,6 +11,30 @@ See https://github.com/facebook/mcrouter/wiki to get started.
 
 ## Quick start guide
 
+### New! Ubuntu package available
+
+Currently, we only have Ubuntu Xenial (16.04) amd64 package.
+Here is how to install it:
+
+Add the repo key:
+
+    $ wget -O - https://facebook.github.io/mcrouter/debian/PUBLIC.KEY | sudo apt-key add
+
+Add the following line to apt sources file /etc/apt/sources.list
+
+    deb https://facebook.github.io/mcrouter/debian xenial contrib
+
+Update the local repo cache:
+
+    $ sudo apt-get update
+
+Install mcrouter:
+
+    $ sudo apt-get install mcrouter
+
+
+### Installing From Source
+
 See https://github.com/facebook/mcrouter/wiki/mcrouter-installation for more
 detailed installation instructions.
 
@@ -65,7 +89,6 @@ Engineering discussions and support: https://www.facebook.com/groups/mcrouter
 ## License
 
 Copyright (c) 2016, Facebook, Inc.
-All rights reserved.
 
-Licensed under a BSD license:
+Licensed under the MIT license:
 https://github.com/facebook/mcrouter/blob/master/LICENSE

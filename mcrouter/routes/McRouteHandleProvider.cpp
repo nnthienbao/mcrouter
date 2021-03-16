@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "McRouteHandleProvider.h"
@@ -16,15 +14,20 @@
 #include "mcrouter/routes/AllInitialRouteFactory.h"
 #include "mcrouter/routes/AllMajorityRouteFactory.h"
 #include "mcrouter/routes/AllSyncRouteFactory.h"
+#include "mcrouter/routes/CarbonLookasideRoute.h"
 #include "mcrouter/routes/DevNullRoute.h"
-#include "mcrouter/routes/ErrorRouteFactory.h"
+#include "mcrouter/routes/ErrorRoute.h"
 #include "mcrouter/routes/FailoverRoute.h"
 #include "mcrouter/routes/FailoverWithExptimeRouteFactory.h"
 #include "mcrouter/routes/HashRouteFactory.h"
 #include "mcrouter/routes/HostIdRouteFactory.h"
 #include "mcrouter/routes/L1L2CacheRouteFactory.h"
+#include "mcrouter/routes/L1L2SizeSplitRoute.h"
+#include "mcrouter/routes/LatencyInjectionRoute.h"
 #include "mcrouter/routes/LatestRoute.h"
+#include "mcrouter/routes/LoadBalancerRoute.h"
 #include "mcrouter/routes/LoggingRoute.h"
+#include "mcrouter/routes/McExtraRouteHandleProvider.h"
 #include "mcrouter/routes/MigrateRouteFactory.h"
 #include "mcrouter/routes/MissFailoverRoute.h"
 #include "mcrouter/routes/ModifyExptimeRoute.h"
@@ -34,12 +37,47 @@
 #include "mcrouter/routes/RandomRouteFactory.h"
 #include "mcrouter/routes/ShadowRoute.h"
 
+namespace folly {
+struct dynamic;
+}
+
 namespace facebook {
 namespace memcache {
 namespace mcrouter {
 
 using McRouteHandleFactory = RouteHandleFactory<McrouterRouteHandleIf>;
 
+/**
+ * This implementation is only for test purposes. Typically the users of
+ * CarbonLookaside will be services other than memcache.
+ */
+class MemcacheCarbonLookasideHelper {
+ public:
+  MemcacheCarbonLookasideHelper(const folly::dynamic* /* jsonConfig */) {}
+
+  static std::string name() {
+    return "MemcacheCarbonLookasideHelper";
+  }
+
+  template <typename Request>
+  bool cacheCandidate(const Request& /* unused */) {
+    if (Request::hasKey) {
+      return true;
+    }
+    return false;
+  }
+
+  template <typename Request>
+  std::string buildKey(const Request& req) {
+    if (Request::hasKey) {
+      return req.key().fullKey().str();
+    }
+    return std::string();
+  }
+
+  template <typename Reply>
+  void postProcessCachedReply(Reply& /* reply */) const {}
+};
 
 McrouterRouteHandlePtr makeWarmUpRoute(
     McRouteHandleFactory& factory,
@@ -48,7 +86,7 @@ McrouterRouteHandlePtr makeWarmUpRoute(
 template <>
 std::unique_ptr<ExtraRouteHandleProviderIf<MemcacheRouterInfo>>
 McRouteHandleProvider<MemcacheRouterInfo>::buildExtraProvider() {
-  return createExtraRouteHandleProvider();
+  return std::make_unique<McExtraRouteHandleProvider<MemcacheRouterInfo>>();
 }
 
 template <>
@@ -60,6 +98,10 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<MemcacheRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<MemcacheRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<MemcacheRouterInfo>},
+      {"CarbonLookasideRoute",
+       &createCarbonLookasideRoute<
+           MemcacheRouterInfo,
+           MemcacheCarbonLookasideHelper>},
       {"DevNullRoute", &makeDevNullRoute<MemcacheRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<MemcacheRouterInfo>},
       {"FailoverWithExptimeRoute",
@@ -69,8 +111,11 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
          return makeHashRoute<McrouterRouterInfo>(factory, json);
        }},
       {"HostIdRoute", &makeHostIdRoute<MemcacheRouterInfo>},
+      {"LatencyInjectionRoute", &makeLatencyInjectionRoute<MemcacheRouterInfo>},
       {"L1L2CacheRoute", &makeL1L2CacheRoute<MemcacheRouterInfo>},
+      {"L1L2SizeSplitRoute", &makeL1L2SizeSplitRoute},
       {"LatestRoute", &makeLatestRoute<MemcacheRouterInfo>},
+      {"LoadBalancerRoute", &makeLoadBalancerRoute<MemcacheRouterInfo>},
       {"LoggingRoute", &makeLoggingRoute<MemcacheRouterInfo>},
       {"MigrateRoute", &makeMigrateRoute<MemcacheRouterInfo>},
       {"MissFailoverRoute", &makeMissFailoverRoute<MemcacheRouterInfo>},

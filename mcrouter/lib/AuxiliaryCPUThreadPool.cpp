@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "AuxiliaryCPUThreadPool.h"
@@ -20,11 +18,11 @@ namespace {
 folly::Singleton<AuxiliaryCPUThreadPool> gAuxiliaryCPUThreadPool;
 } // anonymous
 
-wangle::CPUThreadPoolExecutor& AuxiliaryCPUThreadPool::getThreadPool() {
+folly::CPUThreadPoolExecutor& AuxiliaryCPUThreadPool::getThreadPool() {
   folly::call_once(initFlag_, [&] {
-    threadPool_ = std::make_unique<wangle::CPUThreadPoolExecutor>(
+    threadPool_ = std::make_unique<folly::CPUThreadPoolExecutor>(
         kNumCPUThreads,
-        std::make_shared<wangle::NamedThreadFactory>("mcr-cpuaux-"));
+        std::make_shared<folly::NamedThreadFactory>("mcr-cpuaux-"));
   });
 
   return *threadPool_;

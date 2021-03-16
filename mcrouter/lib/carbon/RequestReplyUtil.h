@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -21,9 +19,10 @@
 
 namespace facebook {
 namespace memcache {
+struct UmbrellaMessageInfo;
 class McServerRequestContext;
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook
 
 namespace carbon {
 
@@ -78,35 +77,57 @@ struct GetRequestReplyPairsImpl<List<>> {
   using type = List<>;
 };
 
-} // detail
+} // namespace detail
 
 template <class RequestList>
 using GetRequestReplyPairs =
     typename detail::GetRequestReplyPairsImpl<RequestList>::type;
 
 template <typename Reply>
-typename std::enable_if<detail::HasMessage<Reply>::value>::type
-setMessageIfPresent(Reply& reply, std::string msg) {
+typename std::enable_if_t<detail::HasMessage<Reply>::value> setMessageIfPresent(
+    Reply& reply,
+    std::string msg) {
   reply.message() = std::move(msg);
 }
 
 template <typename Reply>
-typename std::enable_if<!detail::HasMessage<Reply>::value>::type
+typename std::enable_if_t<!detail::HasMessage<Reply>::value>
 setMessageIfPresent(Reply&, std::string) {}
 
+template <typename Reply>
+typename std::enable_if_t<detail::HasMessage<Reply>::value, folly::StringPiece>
+getMessage(const Reply& reply) {
+  return reply.message();
+}
+
+template <typename Reply>
+typename std::enable_if_t<!detail::HasMessage<Reply>::value, folly::StringPiece>
+getMessage(const Reply&) {
+  return folly::StringPiece{};
+}
+
 namespace detail {
+
 inline folly::IOBuf* bufPtr(folly::Optional<folly::IOBuf>& buf) {
   return buf.get_pointer();
 }
+inline const folly::IOBuf* bufPtr(const folly::Optional<folly::IOBuf>& buf) {
+  return buf.get_pointer();
+}
+
 inline folly::IOBuf* bufPtr(folly::IOBuf& buf) {
   return &buf;
 }
-} // detail
+inline const folly::IOBuf* bufPtr(const folly::IOBuf& buf) {
+  return &buf;
+}
+
+} // namespace detail
 
 template <class R>
 typename std::enable_if<R::hasValue, const folly::IOBuf*>::type valuePtrUnsafe(
     const R& requestOrReply) {
-  return detail::bufPtr(const_cast<R&>(requestOrReply).value());
+  return detail::bufPtr(requestOrReply.value());
 }
 template <class R>
 typename std::enable_if<R::hasValue, folly::IOBuf*>::type valuePtrUnsafe(
@@ -215,7 +236,7 @@ struct RequestListLimitsImpl<List<T, Ts...>> {
       : RequestListLimitsImpl<List<Ts...>>::maxTypeId;
   static constexpr size_t typeIdRangeSize = maxTypeId - minTypeId + 1;
 };
-} // detail
+} // namespace detail
 
 /**
  * Limits (min, max and rangeSize) of a list of requests.
@@ -276,14 +297,20 @@ template <class RequestList, class T>
 constexpr size_t RequestIdMap<RequestList, T>::kMaxId;
 
 namespace detail {
-// Utility class useful for checking whether a particular OnRequest handler
-// class defines an onRequest() handler for Request.
+
+/**
+ * Utility class useful for checking whether a particular OnRequest handler
+ * class defines an onRequest() handler for Request.
+ *
+ * @tparam Request    The Request type.
+ * @tparam OnReqest   The OnRequest type.
+ */
 class CanHandleRequest {
-  template <class R, class O>
+  template <class Request, class OnRequest>
   static constexpr auto check(int) -> decltype(
-      std::declval<O>().onRequest(
+      std::declval<OnRequest>().onRequest(
           std::declval<facebook::memcache::McServerRequestContext>(),
-          std::declval<R>()),
+          std::declval<Request>()),
       std::true_type()) {
     return {};
   }
@@ -299,6 +326,39 @@ class CanHandleRequest {
     return {};
   }
 };
-} // detail
 
-} // carbon
+/**
+ * Utility class useful for checking whether a particular OnRequest handler
+ * class defines an onRequest() handler for Request with a pointer to the raw
+ * buffer.
+ *
+ * @tparam Request    The Request type.
+ * @tparam OnReqest   The OnRequest type.
+ */
+class CanHandleRequestWithBuffer {
+  template <class Request, class OnRequest>
+  static constexpr auto check(int) -> decltype(
+      std::declval<OnRequest>().onRequest(
+          std::declval<facebook::memcache::McServerRequestContext>(),
+          std::declval<Request>(),
+          std::declval<facebook::memcache::UmbrellaMessageInfo*>(),
+          std::declval<folly::IOBuf*>()),
+      std::true_type()) {
+    return {};
+  }
+
+  template <class Request, class OnRequest>
+  static constexpr std::false_type check(...) {
+    return {};
+  }
+
+ public:
+  template <class Request, class OnRequest>
+  static constexpr auto value() -> decltype(check<Request, OnRequest>(0)) {
+    return {};
+  }
+};
+
+} // namespace detail
+
+} // namespace carbon

@@ -1,13 +1,10 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
-#include <limits>
 #include <memory>
 
 #include <gtest/gtest.h>
@@ -16,22 +13,13 @@
 #include <folly/io/IOBuf.h>
 
 #include "mcrouter/lib/CompressionCodecManager.h"
+#include "mcrouter/lib/test/CompressionTestUtil.h"
 
 namespace facebook {
 namespace memcache {
 namespace test {
 
 namespace {
-
-std::string createBinaryData(size_t size) {
-  std::string dic;
-  dic.reserve(size);
-  for (size_t i = 0; i < size; ++i) {
-    dic.push_back(static_cast<char>(
-        folly::Random::rand32(0, std::numeric_limits<char>::max() + 1)));
-  }
-  return dic;
-}
 
 void validateCodec(CompressionCodec* codec) {
   EXPECT_TRUE(codec);
@@ -238,125 +226,8 @@ TEST(CompressionCodecManager, invalidDictionary) {
   validateCodec(codecMap->get(3));
 }
 
-void buildCodecConfigs(
-    std::unordered_map<uint32_t, CodecConfigPtr>& codecConfigs) {
-  codecConfigs.emplace(
-      1,
-      std::make_unique<CodecConfig>(
-          1, /* id */
-          CompressionCodecType::LZ4,
-          createBinaryData(1024),
-          FilteringOptions(
-              1025, /* minCompressionThreshold */
-              std::numeric_limits<uint32_t>::max(), /* maxCompressionThreshold*/
-              0, /* typeId */
-              true /* isEnabled */)));
-  codecConfigs.emplace(
-      2,
-      std::make_unique<CodecConfig>(
-          2, /* id */
-          CompressionCodecType::ZSTD,
-          createBinaryData(1024),
-          FilteringOptions(
-              64, /* minCompressionThreshold */
-              1024, /* maxCompressionThreshold*/
-              0, /* typeId */
-              true /* isEnabled */
-              ),
-          5 /* compressionLevel*/));
-  codecConfigs.emplace(
-      3,
-      std::make_unique<CodecConfig>(
-          3, /* id */
-          CompressionCodecType::ZSTD,
-          createBinaryData(1024),
-          FilteringOptions(
-              1025, /* minCompressionThreshold */
-              std::numeric_limits<uint32_t>::max(), /* maxCompressionThreshold*/
-              1, /* typeId */
-              false /* isEnabled */)));
-  codecConfigs.emplace(
-      4,
-      std::make_unique<CodecConfig>(
-          4, /* id */
-          CompressionCodecType::LZ4,
-          createBinaryData(1024),
-          FilteringOptions(
-              1025, /* minCompressionThreshold */
-              std::numeric_limits<uint32_t>::max(), /* maxCompressionThreshold*/
-              0, /* typeId */
-              true /* isEnabled */)));
-  codecConfigs.emplace(
-      5,
-      std::make_unique<CodecConfig>(
-          5, /* id */
-          CompressionCodecType::LZ4Immutable,
-          createBinaryData(1024),
-          FilteringOptions(
-              64, /* minCompressionThreshold */
-              1024, /* maxCompressionThreshold*/
-              0, /* typeId */
-              false /* isEnabled */)));
-  codecConfigs.emplace(
-      6,
-      std::make_unique<CodecConfig>(
-          6, /* id */
-          CompressionCodecType::LZ4Immutable,
-          createBinaryData(1024),
-          FilteringOptions(
-              64, /* minCompressionThreshold */
-              1024, /* maxCompressionThreshold*/
-              2 /* typeId */,
-              true /* isEnabled */)));
-  codecConfigs.emplace(
-      7,
-      std::make_unique<CodecConfig>(
-          7, /* id */
-          CompressionCodecType::LZ4Immutable,
-          createBinaryData(1024),
-          FilteringOptions(
-              64, /* minCompressionThreshold */
-              1024, /* maxCompressionThreshold*/
-              2, /* typeId */
-              false /* isEnabled */)));
-  codecConfigs.emplace(
-      8,
-      std::make_unique<CodecConfig>(
-          8, /* id */
-          CompressionCodecType::LZ4,
-          createBinaryData(1024),
-          FilteringOptions(
-              1025, /* minCompressionThreshold */
-              std::numeric_limits<uint32_t>::max(), /* maxCompressionThreshold*/
-              1, /* typeId */
-              true /* isEnabled */)));
-  codecConfigs.emplace(
-      9,
-      std::make_unique<CodecConfig>(
-          9, /* id */
-          CompressionCodecType::ZSTD,
-          createBinaryData(1024),
-          FilteringOptions(
-              1025, /* minCompressionThreshold */
-              std::numeric_limits<uint32_t>::max(), /* maxCompressionThreshold*/
-              2, /* typeId */
-              true /* isEnabled */)));
-  codecConfigs.emplace(
-      10,
-      std::make_unique<CodecConfig>(
-          10, /* id */
-          CompressionCodecType::ZSTD,
-          createBinaryData(1024),
-          FilteringOptions(
-              64, /* minCompressionThreshold */
-              1024, /* maxCompressionThreshold*/
-              2, /* typeId */
-              true /* isEnabled */)));
-}
-
 TEST(CompressionCodecManager, getBest_validateCodecs) {
-  std::unordered_map<uint32_t, CodecConfigPtr> codecConfigs;
-  buildCodecConfigs(codecConfigs);
+  auto codecConfigs = testCodecConfigs();
   CompressionCodecManager codecManager(std::move(codecConfigs));
   auto codecMap = codecManager.getCodecMap();
 
@@ -370,8 +241,7 @@ TEST(CompressionCodecManager, getBest_validateCodecs) {
 }
 
 TEST(CompressionCodecManager, getBest_noMatches) {
-  std::unordered_map<uint32_t, CodecConfigPtr> codecConfigs;
-  buildCodecConfigs(codecConfigs);
+  auto codecConfigs = testCodecConfigs();
   CompressionCodecManager codecManager(std::move(codecConfigs));
   auto codecMap = codecManager.getCodecMap();
   // client doesn't have codecs
@@ -407,8 +277,7 @@ TEST(CompressionCodecManager, getBest_noMatches) {
 }
 
 TEST(CompressionCodecManager, getBest_matches) {
-  std::unordered_map<uint32_t, CodecConfigPtr> codecConfigs;
-  buildCodecConfigs(codecConfigs);
+  auto codecConfigs = testCodecConfigs();
   CompressionCodecManager codecManager(std::move(codecConfigs));
   auto codecMap = codecManager.getCodecMap();
   EXPECT_EQ(

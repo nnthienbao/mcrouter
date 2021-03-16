@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -65,13 +63,15 @@ class DestinationRoute {
    */
   DestinationRoute(
       std::shared_ptr<ProxyDestination> destination,
-      std::string poolName,
+      folly::StringPiece poolName,
       size_t indexInPool,
+      int32_t poolStatIdx,
       std::chrono::milliseconds timeout,
       bool keepRoutingPrefix)
       : destination_(std::move(destination)),
-        poolName_(std::move(poolName)),
+        poolName_(poolName),
         indexInPool_(indexInPool),
+        poolStatIndex_(poolStatIdx),
         timeout_(timeout),
         keepRoutingPrefix_(keepRoutingPrefix) {}
 
@@ -105,11 +105,12 @@ class DestinationRoute {
 
  private:
   const std::shared_ptr<ProxyDestination> destination_;
-  const std::string poolName_;
+  const folly::StringPiece poolName_;
   const size_t indexInPool_;
+  const int32_t poolStatIndex_{-1};
   const std::chrono::milliseconds timeout_;
-  const bool keepRoutingPrefix_;
   size_t pendingShadowReqs_{0};
+  const bool keepRoutingPrefix_;
 
   template <class Request>
   ReplyT<Request> routeWithDestination(const Request& req) const {
@@ -121,14 +122,23 @@ class DestinationRoute {
   template <class Request>
   ReplyT<Request> checkAndRoute(const Request& req) const {
     auto& ctx = fiber_local<RouterInfo>::getSharedCtx();
-    if (!destination_->may_send()) {
-      return constructAndLog(req, *ctx, TkoReply);
+    mc_res_t tkoReason;
+    if (!destination_->maySend(tkoReason)) {
+      return constructAndLog(
+          req,
+          *ctx,
+          TkoReply,
+          folly::to<std::string>(
+              "Server unavailable. Reason: ", mc_res_to_string(tkoReason)));
     }
 
     if (destination_->shouldDrop<Request>()) {
       return constructAndLog(req, *ctx, BusyReply);
     }
 
+    if (poolStatIndex_ >= 0) {
+      ctx->setPoolStatsIndex(poolStatIndex_);
+    }
     auto requestClass = fiber_local<RouterInfo>::getRequestClass();
     if (ctx->recording()) {
       bool isShadow = requestClass.is(RequestClass::kShadow);
@@ -176,6 +186,7 @@ class DestinationRoute {
         fiber_local<RouterInfo>::getRequestClass(),
         now,
         now,
+        poolStatIndex_,
         replyContext);
     return reply;
   }
@@ -202,7 +213,13 @@ class DestinationRoute {
 
     const auto& reqToSend = newReq ? *newReq : req;
     ReplyStatsContext replyContext;
-    auto reply = destination_->send(reqToSend, dctx, timeout_, replyContext);
+    size_t passThroughKey = 0;
+    if (ctx.proxy().getRouterOptions().use_server_index_as_pass_through_key) {
+      // passThroughKey should be the 1-based index of the server in the pool.
+      passThroughKey = indexInPool_ + 1;
+    }
+    auto reply = destination_->send(
+        reqToSend, dctx, timeout_, passThroughKey, replyContext);
     ctx.onReplyReceived(
         poolName_,
         *destination_->accessPoint(),
@@ -212,7 +229,10 @@ class DestinationRoute {
         fiber_local<RouterInfo>::getRequestClass(),
         dctx.startTime,
         dctx.endTime,
+        poolStatIndex_,
         replyContext);
+
+    fiber_local<RouterInfo>::setServerLoad(replyContext.serverLoad);
     return reply;
   }
 
@@ -229,11 +249,13 @@ class DestinationRoute {
     auto proxy = &fiber_local<RouterInfo>::getSharedCtx()->proxy();
     auto& ap = *destination_->accessPoint();
     folly::fibers::Baton b;
-    auto res = proxy->router().asyncWriter().run(
-        [&b, &ap, proxy, key, asynclogName]() {
-          proxy->asyncLog().writeDelete(ap, key, asynclogName);
-          b.post();
-        });
+    auto res = false;
+    if (auto asyncWriter = proxy->router().asyncWriter()) {
+      res = asyncWriter->run([&b, &ap, proxy, key, asynclogName]() {
+        proxy->asyncLog().writeDelete(ap, key, asynclogName);
+        b.post();
+      });
+    }
     if (!res) {
       MC_LOG_FAILURE(
           proxy->router().opts(),
@@ -253,14 +275,16 @@ class DestinationRoute {
 template <class RouterInfo>
 std::shared_ptr<typename RouterInfo::RouteHandleIf> makeDestinationRoute(
     std::shared_ptr<ProxyDestination> destination,
-    std::string poolName,
+    folly::StringPiece poolName,
     size_t indexInPool,
+    int32_t poolStatsIndex,
     std::chrono::milliseconds timeout,
     bool keepRoutingPrefix) {
   return makeRouteHandleWithInfo<RouterInfo, DestinationRoute>(
       std::move(destination),
-      std::move(poolName),
+      poolName,
       indexInPool,
+      poolStatsIndex,
       timeout,
       keepRoutingPrefix);
 }

@@ -1,15 +1,14 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <arpa/inet.h>
 
 #include "mcrouter/lib/fbi/cpp/util.h"
+#include "mcrouter/lib/IOBufUtil.h"
 
 namespace facebook {
 namespace memcache {
@@ -136,40 +135,6 @@ void McClientAsciiParser::initializeReplyParser() {
       "Unexpected call to McAsciiParser::initializeReplyParser "
       "with template arguments [Request = {}]",
       typeid(Request).name());
-}
-
-/**
- * Append piece of IOBuf in range [posStart, posEnd) to destination IOBuf.
- */
-inline void McAsciiParserBase::appendKeyPiece(
-    const folly::IOBuf& from,
-    folly::IOBuf& to,
-    const char* posStart,
-    const char* posEnd) {
-  // No need to process empty piece.
-  if (UNLIKELY(posEnd == posStart)) {
-    return;
-  }
-
-  if (LIKELY(to.length() == 0)) {
-    from.cloneOneInto(to);
-    trimIOBufToRange(to, posStart, posEnd);
-  } else {
-    auto nextPiece = from.cloneOne();
-    trimIOBufToRange(*nextPiece, posStart, posEnd);
-    to.prependChain(std::move(nextPiece));
-  }
-}
-
-/**
- * Trim IOBuf to reference only data from range [posStart, posEnd).
- */
-inline void McAsciiParserBase::trimIOBufToRange(
-    folly::IOBuf& buffer,
-    const char* posStart,
-    const char* posEnd) {
-  buffer.trimStart(posStart - reinterpret_cast<const char*>(buffer.data()));
-  buffer.trimEnd(buffer.length() - (posEnd - posStart));
 }
 
 template <class Callback>

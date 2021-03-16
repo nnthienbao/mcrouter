@@ -1,17 +1,15 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
-#include <folly/CallOnce.h>
 #include <folly/Singleton.h>
-#include <wangle/concurrent/CPUThreadPoolExecutor.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/synchronization/CallOnce.h>
 
 namespace facebook {
 namespace memcache {
@@ -25,10 +23,10 @@ namespace mcrouter {
  */
 class AuxiliaryCPUThreadPool {
  public:
-  wangle::CPUThreadPoolExecutor& getThreadPool();
+  folly::CPUThreadPoolExecutor& getThreadPool();
 
  private:
-  std::unique_ptr<wangle::CPUThreadPoolExecutor> threadPool_;
+  std::unique_ptr<folly::CPUThreadPoolExecutor> threadPool_;
   folly::once_flag initFlag_;
 };
 

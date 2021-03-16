@@ -1,15 +1,15 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <memory>
 
+#include <folly/FileUtil.h>
 #include <folly/Range.h>
+#include <folly/json.h>
 
 #include "mcrouter/CarbonRouterInstanceBase.h"
 #include "mcrouter/McrouterLogger.h"
@@ -17,7 +17,6 @@
 #include "mcrouter/config.h"
 #include "mcrouter/flavor.h"
 #include "mcrouter/options.h"
-#include "mcrouter/routes/McExtraRouteHandleProvider.h"
 #include "mcrouter/routes/McrouterRouteHandle.h"
 #include "mcrouter/standalone_options.h"
 
@@ -50,11 +49,6 @@ std::unique_ptr<ConfigApi> createConfigApi(const McrouterOptions& opts) {
 
 std::string performOptionSubstitution(std::string str) {
   return str;
-}
-
-std::unique_ptr<ExtraRouteHandleProviderIf<MemcacheRouterInfo>>
-createExtraRouteHandleProvider() {
-  return std::make_unique<McExtraRouteHandleProvider<MemcacheRouterInfo>>();
 }
 
 std::unique_ptr<McrouterLogger> createMcrouterLogger(
@@ -128,6 +122,19 @@ std::string getBinPath(folly::StringPiece name) {
   return "unknown";
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+void finalizeOptions(McrouterOptions&) {}
+
+folly::dynamic readStaticJsonFile(folly::StringPiece file) {
+  std::string contents;
+  if (!folly::readFile(file.str().c_str(), contents)) {
+    LOG(ERROR) << "Failed to open pool-stats-config-file " << file.str();
+    return nullptr;
+  }
+  return folly::parseJson(contents);
+}
+
+void initStandaloneSSL() {}
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -27,6 +25,7 @@
 #include "mcrouter/config-impl.h"
 #include "mcrouter/config.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
+#include "mcrouter/lib/carbon/CarbonMessageConversionUtils.h"
 #include "mcrouter/lib/fbi/cpp/globals.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 #include "mcrouter/lib/network/CarbonMessageList.h"
@@ -79,13 +78,19 @@ class RouteHandlesCommandDispatcher {
       const ProxyRoute<RouterInfo>& proxyRoute) {
     std::string tree;
     int level = 0;
+    Request request;
     RouteHandleTraverser<typename RouterInfo::RouteHandleIf> t(
         [&tree, &level](const typename RouterInfo::RouteHandleIf& rh) {
           tree.append(std::string(level, ' ') + rh.routeName() + '\n');
           ++level;
         },
         [&level]() { --level; });
-    proxyRoute.traverse(Request(key), t);
+    if (!key.empty() && key[0] == '{' && key[key.size() - 1] == '}') {
+      carbon::convertFromFollyDynamic(folly::parseJson(key), request);
+    } else {
+      request.key() = key;
+    }
+    proxyRoute.traverse(request, t);
     return tree;
   }
 };
@@ -122,9 +127,16 @@ class RouteCommandDispatcher {
                   [&destinations](const PoolContext&, const AccessPoint& dest) {
                     destinations->push_back(dest.toHostPortString());
                   });
-          Request recordingReq(keyStr);
+          Request recordingReq;
+          if (!keyStr.empty() && keyStr[0] == '{' &&
+              keyStr[keyStr.size() - 1] == '}') {
+            carbon::convertFromFollyDynamic(
+                folly::parseJson(keyStr), recordingReq);
+          } else {
+            recordingReq.key() = keyStr;
+          }
           fiber_local<RouterInfo>::runWithLocals(
-              [ ctx = std::move(rctx), &recordingReq, &proxyRoute ]() mutable {
+              [ctx = std::move(rctx), &recordingReq, &proxyRoute]() mutable {
                 fiber_local<RouterInfo>::setSharedCtx(std::move(ctx));
                 /* ignore the reply */
                 proxyRoute.route(recordingReq);
@@ -167,7 +179,7 @@ class RouteCommandDispatcher {
 
 template <class RouterInfo>
 struct ServiceInfo<RouterInfo>::ServiceInfoImpl {
-  Proxy<RouterInfo>* proxy_;
+  Proxy<RouterInfo>& proxy_;
   ProxyRoute<RouterInfo>& proxyRoute_;
   std::unordered_map<
       std::string,
@@ -179,7 +191,7 @@ struct ServiceInfo<RouterInfo>::ServiceInfoImpl {
   mutable detail::RouteCommandDispatcher<RouterInfo> routeCommandDispatcher_;
 
   ServiceInfoImpl(
-      Proxy<RouterInfo>* proxy,
+      Proxy<RouterInfo>& proxy,
       const ProxyConfig<RouterInfo>& config);
 
   void handleRequest(
@@ -200,13 +212,13 @@ ServiceInfo<RouterInfo>::~ServiceInfo() {}
 
 template <class RouterInfo>
 ServiceInfo<RouterInfo>::ServiceInfo(
-    Proxy<RouterInfo>* proxy,
+    Proxy<RouterInfo>& proxy,
     const ProxyConfig<RouterInfo>& config)
     : impl_(std::make_unique<ServiceInfoImpl>(proxy, config)) {}
 
 template <class RouterInfo>
 ServiceInfo<RouterInfo>::ServiceInfoImpl::ServiceInfoImpl(
-    Proxy<RouterInfo>* proxy,
+    Proxy<RouterInfo>& proxy,
     const ProxyConfig<RouterInfo>& config)
     : proxy_(proxy), proxyRoute_(config.proxyRoute()) {
   commands_.emplace(
@@ -215,24 +227,25 @@ ServiceInfo<RouterInfo>::ServiceInfoImpl::ServiceInfoImpl(
       });
 
   commands_.emplace(
-      "config_age", [proxy](const std::vector<folly::StringPiece>& /* args */) {
+      "config_age",
+      [&proxy](const std::vector<folly::StringPiece>& /* args */) {
         /* capturing this and accessing proxy_ crashes gcc-4.7 */
-        return std::to_string(proxy->stats().getConfigAge(time(nullptr)));
+        return std::to_string(proxy.stats().getConfigAge(time(nullptr)));
       });
 
   commands_.emplace(
       "config_file", [this](const std::vector<folly::StringPiece>& /* args */) {
-        folly::StringPiece configStr = proxy_->router().opts().config;
+        folly::StringPiece configStr = proxy_.router().opts().config;
         if (configStr.startsWith(ConfigApi::kFilePrefix)) {
           configStr.removePrefix(ConfigApi::kFilePrefix);
           return configStr.str();
         }
 
-        if (proxy_->router().opts().config_file.empty()) {
+        if (proxy_.router().opts().config_file.empty()) {
           throw std::runtime_error("no config file found!");
         }
 
-        return proxy_->router().opts().config_file;
+        return proxy_.router().opts().config_file;
       });
 
   commands_.emplace(
@@ -241,7 +254,7 @@ ServiceInfo<RouterInfo>::ServiceInfoImpl::ServiceInfoImpl(
           throw std::runtime_error("options: 0 or 1 args expected");
         }
 
-        auto optDict = proxy_->router().getStartupOpts();
+        auto optDict = proxy_.router().getStartupOpts();
 
         if (args.size() == 1) {
           auto it = optDict.find(args[0].str());
@@ -305,7 +318,7 @@ ServiceInfo<RouterInfo>::ServiceInfoImpl::ServiceInfoImpl(
   commands_.emplace(
       "config_sources_info",
       [this](const std::vector<folly::StringPiece>& /* args */) {
-        auto configInfo = proxy_->router().configApi().getConfigSourcesInfo();
+        auto configInfo = proxy_.router().configApi().getConfigSourcesInfo();
         return toPrettySortedJson(configInfo);
       });
 
@@ -314,11 +327,11 @@ ServiceInfo<RouterInfo>::ServiceInfoImpl::ServiceInfoImpl(
       [this](const std::vector<folly::StringPiece>& /* args */) {
         std::string confFile;
         std::string path;
-        if (!proxy_->router().configApi().getConfigFile(confFile, path)) {
+        if (!proxy_.router().configApi().getConfigFile(confFile, path)) {
           throw std::runtime_error("Can not load config from " + path);
         }
         ProxyConfigBuilder builder(
-            proxy_->router().opts(), proxy_->router().configApi(), confFile);
+            proxy_.router().opts(), proxy_.router().configApi(), confFile);
         return toPrettySortedJson(builder.preprocessedConfig());
       });
 
@@ -409,7 +422,7 @@ void ServiceInfo<RouterInfo>::ServiceInfoImpl::handleRouteCommand(
       requestName, typename RouterInfo::RoutableRequests());
 
   if (!routeCommandDispatcher_.dispatch(
-          typeId, ctx, key, *proxy_, proxyRoute_)) {
+          typeId, ctx, key, proxy_, proxyRoute_)) {
     throw std::runtime_error(
         folly::sformat("route: unknown request {}", requestName));
   }

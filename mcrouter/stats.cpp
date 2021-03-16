@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "stats.h"
@@ -19,6 +17,7 @@
 
 #include <folly/Conv.h>
 #include <folly/Range.h>
+#include <folly/experimental/StringKeyedUnorderedMap.h>
 #include <folly/json.h>
 
 #include "mcrouter/CarbonRouterInstanceBase.h"
@@ -85,9 +84,9 @@ struct ServerStat {
     folly::format(" pending_reqs:{}", pendingRequestsCount).appendTo(res);
     folly::format(" inflight_reqs:{}", inflightRequestsCount).appendTo(res);
     if (isHardTko) {
-      folly::format(" hard_tko; ").appendTo(res);
+      res.append(" hard_tko; ");
     } else if (isSoftTko) {
-      folly::format(" soft_tko; ").appendTo(res);
+      res.append(" soft_tko; ");
     }
     if (cntRetransPerKByte > 0) {
       double avgRetransPerKByte = sumRetransPerKByte / cntRetransPerKByte;
@@ -234,7 +233,7 @@ static std::string max_max_stat_to_str(ProxyBase* proxy, int idx) {
 static std::string stat_to_str(const stat_t* stat, void* /* ptr */) {
   switch (stat->type) {
     case stat_string:
-      return stat->data.string;
+      return stat->data.string ? stat->data.string : "";
     case stat_uint64:
       return folly::to<std::string>(stat->data.uint64);
     case stat_int64:
@@ -338,6 +337,32 @@ static int get_proc_stat(pid_t pid, proc_stat_data_t* data) {
   return 0;
 }
 
+void append_pool_stats(
+    CarbonRouterInstanceBase& router,
+    std::vector<stat_t>& stats) {
+  folly::StringKeyedUnorderedMap<stat_t> mergedPoolStatsMap;
+
+  auto mergeMaps = [&mergedPoolStatsMap](
+                       folly::StringKeyedUnorderedMap<stat_t>&& poolStatMap) {
+    for (auto& poolStatMapEntry : poolStatMap) {
+      auto it = mergedPoolStatsMap.find(poolStatMapEntry.first);
+      if (it != mergedPoolStatsMap.end()) {
+        it->second.data.uint64 += poolStatMapEntry.second.data.uint64;
+      } else {
+        mergedPoolStatsMap.insert(std::move(poolStatMapEntry));
+      }
+    }
+  };
+
+  for (size_t j = 0; j < router.opts().num_proxies; ++j) {
+    auto pr = router.getProxyBase(j);
+    mergeMaps(pr->stats().getAggregatedPoolStatsMap());
+  }
+  for (const auto& mergedPoolStatMapEntry : mergedPoolStatsMap) {
+    stats.emplace_back(mergedPoolStatMapEntry.second);
+  }
+}
+
 void prepare_stats(CarbonRouterInstanceBase& router, stat_t* stats) {
   init_stats(stats);
 
@@ -352,6 +377,8 @@ void prepare_stats(CarbonRouterInstanceBase& router, stat_t* stats) {
   uint64_t outstandingUpdateWaitTimeSumUs = 0;
   uint64_t retransPerKByteSum = 0;
   uint64_t retransNumTotal = 0;
+  uint64_t destinationRequestsDirtyBufferSum = 0;
+  uint64_t destinationRequestsTotalSum = 0;
 
   for (size_t i = 0; i < router.opts().num_proxies; ++i) {
     auto proxy = router.getProxyBase(i);
@@ -379,6 +406,12 @@ void prepare_stats(CarbonRouterInstanceBase& router, stat_t* stats) {
         proxy->stats().getStatValueWithinWindow(retrans_per_kbyte_sum_stat);
     retransNumTotal +=
         proxy->stats().getStatValueWithinWindow(retrans_num_total_stat);
+
+    destinationRequestsDirtyBufferSum +=
+        proxy->stats().getStatValueWithinWindow(
+            destination_reqs_dirty_buffer_sum_stat);
+    destinationRequestsTotalSum += proxy->stats().getStatValueWithinWindow(
+        destination_reqs_total_sum_stat);
   }
 
   stat_set_uint64(
@@ -397,6 +430,14 @@ void prepare_stats(CarbonRouterInstanceBase& router, stat_t* stats) {
     avgRetransPerKByte = retransPerKByteSum / (double)retransNumTotal;
   }
   stats[retrans_per_kbyte_avg_stat].data.dbl = avgRetransPerKByte;
+
+  double reqsDirtyBufferRatio = 0.0;
+  if (destinationRequestsTotalSum != 0) {
+    reqsDirtyBufferRatio =
+        destinationRequestsDirtyBufferSum / (double)destinationRequestsTotalSum;
+  }
+  stats[destination_reqs_dirty_buffer_ratio_stat].data.dbl =
+      reqsDirtyBufferRatio;
 
   stats[outstanding_route_get_avg_queue_size_stat].data.dbl = 0.0;
   stats[outstanding_route_get_avg_wait_time_sec_stat].data.dbl = 0.0;
@@ -466,11 +507,20 @@ void prepare_stats(CarbonRouterInstanceBase& router, stat_t* stats) {
         stats[fibers_stack_high_watermark_stat].data.uint64,
         pr->fiberManager().stackHighWatermark());
     stats[duration_us_stat].data.dbl += pr->stats().durationUs().value();
+    stats[duration_get_us_stat].data.dbl += pr->stats().durationGetUs().value();
+    stats[duration_update_us_stat].data.dbl +=
+        pr->stats().durationUpdateUs().value();
+    stats[inactive_connection_closed_interval_sec_stat].data.dbl +=
+        pr->stats().inactiveConnectionClosedIntervalSec().value();
     stats[client_queue_notify_period_stat].data.dbl += pr->queueNotifyPeriod();
   }
 
   if (router.opts().num_proxies > 0) {
     stats[duration_us_stat].data.dbl /= router.opts().num_proxies;
+    stats[duration_get_us_stat].data.dbl /= router.opts().num_proxies;
+    stats[duration_update_us_stat].data.dbl /= router.opts().num_proxies;
+    stats[inactive_connection_closed_interval_sec_stat].data.dbl /=
+        router.opts().num_proxies;
     stats[client_queue_notify_period_stat].data.dbl /=
         router.opts().num_proxies;
   }
@@ -554,9 +604,9 @@ McStatsReply stats_reply(ProxyBase* proxy, folly::StringPiece group_str) {
     return errorReply;
   }
 
-  stat_t stats[num_stats];
+  std::vector<stat_t> stats(num_stats);
 
-  prepare_stats(proxy->router(), stats);
+  prepare_stats(proxy->router(), stats.data());
 
   for (unsigned int ii = 0; ii < num_stats; ii++) {
     stat_t* stat = &stats[ii];
@@ -572,6 +622,7 @@ McStatsReply stats_reply(ProxyBase* proxy, folly::StringPiece group_str) {
       }
     }
   }
+  append_pool_stats(proxy->router(), stats);
 
   if (groups & (mcproxy_stats | all_stats | detailed_stats | ods_stats)) {
     folly::dynamic requestStats(folly::dynamic::object());

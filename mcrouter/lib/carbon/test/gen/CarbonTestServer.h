@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -36,8 +34,7 @@ using CarbonTestRequestList = carbon::List<
     facebook::memcache::McStatsRequest,
     facebook::memcache::McVersionRequest,
     test2::util::YetAnotherRequest>;
-
-} // detail
+} // namespace detail
 
 template <class OnRequest>
 class CarbonTestRequestHandler
@@ -51,6 +48,5 @@ class CarbonTestRequestHandler
       : carbon::CarbonRequestHandler<OnRequest, detail::CarbonTestRequestList>(
             std::forward<Args>(args)...) {}
 };
-
-} // test
-} // carbon
+} // namespace test
+} // namespace carbon

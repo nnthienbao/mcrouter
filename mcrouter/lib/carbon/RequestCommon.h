@@ -1,10 +1,8 @@
 /*
  *  Copyright (c) 2016-present, Facebook, Inc.
- *  All rights reserved.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -30,7 +28,18 @@ class RequestCommon {
           McFbtraceRef::moveRef(mc_fbtrace_info_deep_copy(other.fbtraceInfo()));
     }
   }
-  RequestCommon& operator=(const RequestCommon&) = delete;
+  RequestCommon& operator=(const RequestCommon& other) {
+    if (this != &other) {
+      fbtraceInfo_.reset();
+      if (other.fbtraceInfo()) {
+        // mc_fbtrace_info_deep_copy returns new object, just keep the refcount
+        // as 1
+        fbtraceInfo_ = McFbtraceRef::moveRef(
+            mc_fbtrace_info_deep_copy(other.fbtraceInfo()));
+      }
+    }
+    return *this;
+  }
 
   RequestCommon(RequestCommon&&) = default;
   RequestCommon& operator=(RequestCommon&&) = default;
@@ -80,9 +89,66 @@ class RequestCommon {
     fbtraceInfo_ = McFbtraceRef::moveRef(carbonFbtraceInfo);
   }
 #endif
+  /*
+  bool quiet() const {
+    return quiet_;
+  }
+  bool& quiet() {
+    return quiet_;
+  }
+  bool returnKey() const {
+    return returnKey_;
+  }
+  bool& returnKey() {
+    return returnKey_;
+  }*/
+
+  /**
+   * Tells whether or not "serializedBuffer()" is dirty, in which case it can't
+   * be used.
+   */
+  bool isBufferDirty() const {
+    return serializedBuffer_ == nullptr;
+  }
+
+  /**
+   * Sets a buffer that can be used to avoid reserializing the request.
+   * If the request is modified *after* this method is called, the buffer will
+   * be marked as dirty and will not be used (i.e. the request will be
+   * re-serialized).
+   *
+   * NOTE: The caller is responsible for keeping the buffer alive until the
+   * reply is received.
+   */
+  void setSerializedBuffer(const folly::IOBuf& buffer) {
+    if (buffer.empty()) {
+      serializedBuffer_ = nullptr;
+    } else {
+      serializedBuffer_ = &buffer;
+    }
+  }
+
+  /**
+   * Gets the buffer with this request serialized.
+   * Will return nullptr if the buffer is dirty and can't be used.
+   */
+  const folly::IOBuf* serializedBuffer() const {
+    return serializedBuffer_;
+  }
+
+ protected:
+  void markBufferAsDirty() {
+    serializedBuffer_ = nullptr;
+  }
 
  private:
   static constexpr size_t kTraceIdSize = 11;
+  // bool quiet_{false};
+  // bool returnKey_{false};
+};
+
+
+  const folly::IOBuf* serializedBuffer_{nullptr};
 
 #ifndef LIBMC_FBTRACE_DISABLE
   struct McFbtraceRefPolicy {

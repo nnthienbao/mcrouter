@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -20,6 +18,7 @@
 #include "mcrouter/lib/debug/ConnectionFifo.h"
 #include "mcrouter/lib/network/AsyncMcServerWorkerOptions.h"
 #include "mcrouter/lib/network/ServerMcParser.h"
+#include "mcrouter/lib/network/WriteBuffer.h"
 #include "mcrouter/lib/network/gen/Memcache.h"
 
 namespace facebook {
@@ -98,7 +97,7 @@ class McServerSession : public folly::DelayedDestruction,
       folly::AsyncTransportWrapper::UniquePtr transport,
       std::shared_ptr<McServerOnRequest> cb,
       StateCallback& stateCb,
-      AsyncMcServerWorkerOptions options,
+      const AsyncMcServerWorkerOptions& options,
       void* userCtxt,
       const CompressionCodecMap* codecMap = nullptr);
 
@@ -170,12 +169,17 @@ class McServerSession : public folly::DelayedDestruction,
     return options_.memController;
   }
 
+  const folly::AsyncTransportWrapper* getTransport() const noexcept {
+    return transport_.get();
+  }
+
  private:
+  const AsyncMcServerWorkerOptions& options_;
+
   folly::AsyncTransportWrapper::UniquePtr transport_;
   folly::EventBase& eventBase_;
   std::shared_ptr<McServerOnRequest> onRequest_;
   StateCallback& stateCb_;
-  AsyncMcServerWorkerOptions options_;
 
   // Debug fifo fields
   ConnectionFifo debugFifo_;
@@ -195,13 +199,12 @@ class McServerSession : public folly::DelayedDestruction,
   std::pair<void*, size_t> curBuffer_;
 
   // All writes to be written at the end of the loop in a single batch.
-  std::unique_ptr<WriteBufferIntrusiveList> pendingWrites_;
+  WriteBuffer::List pendingWrites_;
 
   /**
    * Queue of write buffers.
-   * Only initialized after we know the protocol (see ensureWriteBufs())
    */
-  std::unique_ptr<WriteBufferQueue> writeBufs_;
+  WriteBufferQueue writeBufs_;
 
   /**
    * True iff SendWritesCallback has been scheduled.
@@ -342,15 +345,6 @@ class McServerSession : public folly::DelayedDestruction,
 
   void multiOpEnd();
 
-  /**
-   * Must be called after parser has detected the protocol (i.e.
-   * at least one request was processed).
-   * Closes the session on protocol error
-   * @return True if writeBufs_ has value after this call,
-   *         False on any protocol error.
-   */
-  void ensureWriteBufs();
-
   void queueWrite(std::unique_ptr<WriteBuffer> wb);
 
   void completeWrite();
@@ -388,7 +382,7 @@ class McServerSession : public folly::DelayedDestruction,
       folly::AsyncTransportWrapper::UniquePtr transport,
       std::shared_ptr<McServerOnRequest> cb,
       StateCallback& stateCb,
-      AsyncMcServerWorkerOptions options,
+      const AsyncMcServerWorkerOptions& options,
       void* userCtxt,
       const CompressionCodecMap* codecMap);
 

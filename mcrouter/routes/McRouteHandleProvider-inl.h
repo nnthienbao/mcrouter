@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <memory>
@@ -23,6 +21,7 @@
 #include "mcrouter/lib/fbi/cpp/ParsingUtil.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 #include "mcrouter/lib/network/AccessPoint.h"
+#include "mcrouter/lib/network/SecurityMech.h"
 #include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
 #include "mcrouter/routes/AsynclogRoute.h"
 #include "mcrouter/routes/DestinationRoute.h"
@@ -184,9 +183,16 @@ McRouteHandleProvider<RouterInfo>::makePool(
       }
     }
 
-    bool useSsl = false;
-    if (auto jUseSsl = json.get_ptr("use_ssl")) {
-      useSsl = parseBool(*jUseSsl, "use_ssl");
+    SecurityMech mech = SecurityMech::NONE;
+    if (auto jSecurityMech = json.get_ptr("security_mech")) {
+      auto mechStr = parseString(*jSecurityMech, "security_mech");
+      mech = parseSecurityMech(mechStr);
+    } else if (auto jUseSsl = json.get_ptr("use_ssl")) {
+      // deprecated - prefer security_mech
+      auto useSsl = parseBool(*jUseSsl, "use_ssl");
+      if (useSsl) {
+        mech = SecurityMech::TLS;
+      }
     }
 
     // default to 0, which doesn't override
@@ -208,6 +214,8 @@ McRouteHandleProvider<RouterInfo>::makePool(
         jservers->size(),
         jhostnames ? jhostnames->size() : 0);
 
+    int32_t poolStatIndex = proxy_.router().getStatsEnabledPoolIndex(name);
+
     std::vector<RouteHandlePtr> destinations;
     destinations.reserve(jservers->size());
     for (size_t i = 0; i < jservers->size(); ++i) {
@@ -221,12 +229,7 @@ McRouteHandleProvider<RouterInfo>::makePool(
         continue;
       }
       auto ap = AccessPoint::create(
-          server.stringPiece(),
-          protocol,
-          useSsl,
-          port,
-          enableCompression,
-          jhostnames ? jhostnames->at(i).asString() : "");
+          server.stringPiece(), protocol, mech, port, enableCompression);
       checkLogic(ap != nullptr, "invalid server {}", server.stringPiece());
 
       if (ap->compressed() && proxy_.router().getCodecManager() == nullptr) {
@@ -243,21 +246,32 @@ McRouteHandleProvider<RouterInfo>::makePool(
         }
       }
 
-      accessPoints_[name].push_back(ap);
+      auto it = accessPoints_.find(name);
+      if (it == accessPoints_.end()) {
+        std::vector<std::shared_ptr<const AccessPoint>> accessPoints;
+        it = accessPoints_.emplace(name, std::move(accessPoints)).first;
+      }
+      it->second.push_back(ap);
+      folly::StringPiece nameSp = it->first;
 
       auto pdstn = proxy_.destinationMap()->find(*ap, timeout);
       if (!pdstn) {
         pdstn = proxy_.destinationMap()->emplace(
             std::move(ap), timeout, qosClass, qosPath, RouterInfo::name);
       }
-      pdstn->updatePoolName(name);
       pdstn->updateShortestTimeout(timeout);
 
       destinations.push_back(makeDestinationRoute<RouterInfo>(
-          std::move(pdstn), name, i, timeout, keepRoutingPrefix));
+          std::move(pdstn),
+          nameSp,
+          i,
+          poolStatIndex,
+          timeout,
+          keepRoutingPrefix));
     } // servers
 
-    return pools_.emplace(name, std::move(destinations)).first->second;
+    return pools_.emplace(std::move(name), std::move(destinations))
+        .first->second;
   } catch (const std::exception& e) {
     throwLogic("Pool {}: {}", name, e.what());
   }
@@ -298,6 +312,10 @@ McRouteHandleProvider<RouterInfo>::makePoolRoute(
           "hash_func", WeightedCh3HashFunc::type())("weights", *jWeights);
     }
 
+    if (auto jTags = poolJson.json.get_ptr("tags")) {
+      jhashWithWeights["tags"] = *jTags;
+    }
+
     if (json.isObject()) {
       if (auto jhash = json.get_ptr("hash")) {
         checkLogic(
@@ -322,12 +340,8 @@ McRouteHandleProvider<RouterInfo>::makePoolRoute(
         route = createRateLimitRoute(std::move(route), RateLimiter(*jrates));
       }
       if (auto jsplits = json.get_ptr("shard_splits")) {
-        const bool sendToMainShardSplitEnabled =
-            proxy_.router().opts().enable_send_to_main_shard_split;
         route = makeShardSplitRoute<RouterInfo>(
-            std::move(route),
-            ShardSplitter(*jsplits),
-            sendToMainShardSplitEnabled);
+            std::move(route), ShardSplitter(*jsplits));
       }
       if (auto jasynclog = json.get_ptr("asynclog")) {
         needAsynclog = parseBool(*jasynclog, "asynclog");
@@ -413,6 +427,12 @@ McRouteHandleProvider<RouterInfo>::create(
   throwLogic("Unknown RouteHandle: {}", type);
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+template <class RouterInfo>
+const folly::dynamic& McRouteHandleProvider<RouterInfo>::parsePool(
+    const folly::dynamic& json) {
+  return poolFactory_.parsePool(json).json;
+}
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

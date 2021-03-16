@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 
@@ -62,8 +60,8 @@ void ManyFields::serialize(carbon::CarbonProtocolWriter& writer) const {
   writer.writeField(38 /* field id */, buf38());
   writer.writeField(39 /* field id */, buf39());
   writer.writeField(40 /* field id */, buf40());
+  writer.writeFieldStop();
   writer.writeStructEnd();
-  writer.writeStop();
 }
 
 void ManyFields::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -246,7 +244,6 @@ void ManyFields::deserialize(carbon::CarbonProtocolReader& reader) {
   }
   reader.readStructEnd();
 }
-
-} // test
-} // memcache
-} // facebook
+} // namespace test
+} // namespace memcache
+} // namespace facebook

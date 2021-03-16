@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <arpa/inet.h>
@@ -551,11 +549,29 @@ TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Ipv6) {
   h.runTest(1);
 }
 
+TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Ipv6_notrans) {
+  McAsciiParserHarness h(
+      "META test:key age:345644; exptime:35; "
+      "from:2001:dbaf:7654:7578:12:06ef::1\r\nEND\r\n");
+  h.expectNext<TypeParam>(
+      createMetagetHitReply(345644, 35, 38, "2001:dbaf:7654:7578:12:06ef::1"));
+  h.runTest(1);
+}
+
 TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Ipv4) {
   McAsciiParserHarness h(
       "META test:key age:  345644; exptime:  35; "
       "from:  23.84.127.32; "
       "is_transient:  48\r\nEND\r\n");
+  h.expectNext<TypeParam>(
+      createMetagetHitReply(345644, 35, 48, "23.84.127.32"));
+  h.runTest(1);
+}
+
+TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Ipv4_notrans) {
+  McAsciiParserHarness h(
+      "META test:key age:  345644; exptime:  35; "
+      "from:  23.84.127.32\r\nEND\r\n");
   h.expectNext<TypeParam>(
       createMetagetHitReply(345644, 35, 48, "23.84.127.32"));
   h.runTest(1);
@@ -570,11 +586,27 @@ TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Unknown) {
   h.runTest(1);
 }
 
+TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Unknown_notrans) {
+  McAsciiParserHarness h(
+      "META test:key age:  unknown; exptime:  37; "
+      "from: unknown\r\nEND\r\n");
+  h.expectNext<TypeParam>(createMetagetHitReply(-1, 37, 48, "unknown"));
+  h.runTest(1);
+}
+
 TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Unknown_NegativeOne) {
   McAsciiParserHarness h(
       "META test:key age:  -1; exptime:  37; "
       "from: unknown; "
       "is_transient:  48\r\nEND\r\n");
+  h.expectNext<TypeParam>(createMetagetHitReply(-1, 37, 48, "unknown"));
+  h.runTest(1);
+}
+
+TYPED_TEST(McAsciiParserTestMetaget, MetagetHit_Unknown_NegativeOne_notrans) {
+  McAsciiParserHarness h(
+      "META test:key age:  -1; exptime:  37; "
+      "from: unknown\r\nEND\r\n");
   h.expectNext<TypeParam>(createMetagetHitReply(-1, 37, 48, "unknown"));
   h.runTest(1);
 }
@@ -622,14 +654,11 @@ TEST(McAsciiParserHarness, AllAtOnce) {
       "NOT_FOUND\r\n"
       "END\r\n"
       "META test:key age:345644; exptime:35; "
-      "from:2001:dbaf:7654:7578:12:06ef::1; "
-      "is_transient:38\r\nEND\r\n"
+      "from:2001:dbaf:7654:7578:12:06ef::1\r\nEND\r\n"
       "META test:key age:  345644; exptime:  35; "
-      "from:  23.84.127.32; "
-      "is_transient:  48\r\nEND\r\n"
+      "from:  23.84.127.32\r\nEND\r\n"
       "META test:key age:  unknown; exptime:  37; "
-      "from: unknown; "
-      "is_transient:  48\r\nEND\r\n"
+      "from: unknown\r\nEND\r\n"
       "TOUCHED\r\n");
   h.expectNext<McGetRequest>(
       setFlags(setValue(McGetReply(mc_res_found), "te"), 10));

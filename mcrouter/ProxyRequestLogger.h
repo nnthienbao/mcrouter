@@ -1,15 +1,14 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
 #include "mcrouter/McrouterFiberContext.h"
+#include "mcrouter/lib/carbon/RoutingGroups.h"
 #include "mcrouter/lib/mc/msg.h"
 
 namespace facebook {
@@ -32,9 +31,23 @@ class ProxyRequestLogger {
   Proxy<RouterInfo>& proxy_;
 
   void logError(mc_res_t result, RequestClass reqClass);
+
+ private:
+  template <class Request>
+  void logDurationByRequestType(
+      uint64_t durationUs,
+      carbon::GetLikeT<Request> = 0);
+  template <class Request>
+  void logDurationByRequestType(
+      uint64_t durationUs,
+      carbon::UpdateLikeT<Request> = 0);
+  template <class Request>
+  void logDurationByRequestType(
+      uint64_t durationUs,
+      carbon::OtherThanT<Request, carbon::GetLike<>, carbon::UpdateLike<>> = 0);
 };
-}
-}
-} // facebook::memcache::mcrouter
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook
 
 #include "ProxyRequestLogger-inl.h"

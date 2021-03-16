@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "AsciiSerialized.h"
@@ -363,6 +361,9 @@ void AsciiSerializedReply::prepareImpl(
     assert(len > 0);
     assert(static_cast<size_t>(len) < kMaxBufferLength);
 
+    /* TODO(stuclar): Once mcrouter change to make ascii parsing of
+     *  is_transient is deployed everywhere, remove is_transient.
+     */
     addStrings(
         "META ",
         key,

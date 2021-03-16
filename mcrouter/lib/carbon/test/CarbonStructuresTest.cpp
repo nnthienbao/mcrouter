@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <sys/uio.h>
@@ -21,6 +19,7 @@
 using namespace carbon::test::util;
 
 using carbon::test::SimpleStruct;
+using carbon::test::TestOptionalUnion;
 using carbon::test::TestReply;
 using carbon::test::TestRequest;
 using carbon::test::TestRequestStringKey;
@@ -384,6 +383,8 @@ TEST(CarbonTest, serializeDeserialize) {
   outRequest.testOptionalVec().emplace_back(
       folly::Optional<std::string>("hello"));
 
+  outRequest.testIOBufList().emplace_back(folly::IOBuf());
+
   const auto inRequest = serializeAndDeserialize(outRequest);
   expectEqTestRequest(outRequest, inRequest);
 }
@@ -403,35 +404,38 @@ TEST(CarbonTest, OptionalUnionSerialization) {
   carbon::test::TestOptionalUnion testOpt;
   testOpt.emplace<1>(1);
   auto inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(1, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER1, inOpt.which());
   EXPECT_EQ(testOpt.umember1().hasValue(), inOpt.umember1().hasValue());
   EXPECT_EQ(1, inOpt.umember1().value());
 
-  testOpt.emplace<1>(folly::Optional<int64_t>());
+  testOpt.emplace<TestOptionalUnion::ValueType::UMEMBER1>(
+      folly::Optional<int64_t>());
   inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(1, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER1, inOpt.which());
   EXPECT_EQ(testOpt.umember1().hasValue(), inOpt.umember1().hasValue());
 
-  testOpt.emplace<2>(folly::Optional<bool>(false));
+  testOpt.emplace<TestOptionalUnion::ValueType::UMEMBER2>(false);
   inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(2, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER2, inOpt.which());
   EXPECT_EQ(testOpt.umember2().hasValue(), inOpt.umember2().hasValue());
   EXPECT_EQ(false, inOpt.umember2().value());
 
-  testOpt.emplace<2>(folly::Optional<bool>());
+  testOpt.emplace<TestOptionalUnion::ValueType::UMEMBER2>(
+      folly::Optional<bool>());
   inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(2, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER2, inOpt.which());
   EXPECT_EQ(testOpt.umember2().hasValue(), inOpt.umember2().hasValue());
 
-  testOpt.emplace<3>(folly::Optional<std::string>("test"));
+  testOpt.emplace<TestOptionalUnion::ValueType::UMEMBER3>("test");
   inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(3, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER3, inOpt.which());
   EXPECT_EQ(testOpt.umember3().hasValue(), inOpt.umember3().hasValue());
   EXPECT_EQ("test", inOpt.umember3().value());
 
-  testOpt.emplace<3>(folly::Optional<std::string>());
+  testOpt.emplace<TestOptionalUnion::ValueType::UMEMBER3>(
+      folly::Optional<std::string>());
   inOpt = serializeAndDeserialize(testOpt);
-  ASSERT_EQ(3, inOpt.which());
+  ASSERT_EQ(TestOptionalUnion::ValueType::UMEMBER3, inOpt.which());
   EXPECT_EQ(testOpt.umember3().hasValue(), inOpt.umember3().hasValue());
 }
 
@@ -563,4 +567,19 @@ TEST(CarbonTest, keysString) {
     TestRequest req{std::string(kKeyLiteral)};
     checkKeyFilledProperly(req.key());
   }
+}
+
+TEST(CarbonTest, unionWhich) {
+  TestOptionalUnion un;
+
+  EXPECT_EQ(TestOptionalUnion::ValueType::EMPTY, un.which());
+
+  un.umember1() = 10;
+  EXPECT_EQ(TestOptionalUnion::ValueType::UMEMBER1, un.which());
+
+  un.emplace<TestOptionalUnion::ValueType::UMEMBER2>(true);
+  EXPECT_EQ(TestOptionalUnion::ValueType::UMEMBER2, un.which());
+
+  un.emplace<TestOptionalUnion::ValueType::UMEMBER3>("abc");
+  EXPECT_EQ(TestOptionalUnion::ValueType::UMEMBER3, un.which());
 }

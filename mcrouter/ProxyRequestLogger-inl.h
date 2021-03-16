@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "mcrouter/McrouterFiberContext.h"
@@ -35,7 +33,30 @@ void ProxyRequestLogger<RouterInfo>::log(
 
   const auto durationUs = loggerContext.endTimeUs - loggerContext.startTimeUs;
   proxy_.stats().durationUs().insertSample(durationUs);
+  logDurationByRequestType<Request>(durationUs);
 }
+
+template <class RouterInfo>
+template <class Request>
+void ProxyRequestLogger<RouterInfo>::logDurationByRequestType(
+    uint64_t durationUs,
+    carbon::GetLikeT<Request>) {
+  proxy_.stats().durationGetUs().insertSample(durationUs);
+}
+
+template <class RouterInfo>
+template <class Request>
+void ProxyRequestLogger<RouterInfo>::logDurationByRequestType(
+    uint64_t durationUs,
+    carbon::UpdateLikeT<Request>) {
+  proxy_.stats().durationUpdateUs().insertSample(durationUs);
+}
+
+template <class RouterInfo>
+template <class Request>
+void ProxyRequestLogger<RouterInfo>::logDurationByRequestType(
+    uint64_t /* durationUs */,
+    carbon::OtherThanT<Request, carbon::GetLike<>, carbon::UpdateLike<>>) {}
 
 #define REQUEST_CLASS_ERROR_STATS(proxy, ERROR, reqClass)     \
   do {                                                        \

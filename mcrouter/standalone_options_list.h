@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 // @nolint
@@ -31,6 +29,14 @@ MCROUTER_OPTION_STRING(
     "Name of the carbon router to use")
 
 MCROUTER_OPTION_OTHER(
+    std::vector<std::string>,
+    listen_addresses,
+    ,
+    "listen-addresses",
+    no_short,
+    "Address(es) to listen on (comma separated)")
+
+MCROUTER_OPTION_OTHER(
     std::vector<uint16_t>,
     ports,
     ,
@@ -51,6 +57,34 @@ MCROUTER_OPTION_STRING(
   "tls-ticket-key-seed-path", no_short,
   "Path to file containing JSON object for old, current, and new seeds"
   " used to generate TLS ticket keys")
+
+MCROUTER_OPTION_TOGGLE(
+    ssl_require_peer_certs,
+    false,
+    "ssl-require-peer-certs",
+    no_short,
+    "If enabled, clients must present valid certificates when using ssl")
+
+MCROUTER_OPTION_STRING(
+    server_pem_cert_path,
+    "",
+    "server-pem-cert-path",
+    no_short,
+    "Path of pem-style server certificate for ssl.")
+
+MCROUTER_OPTION_STRING(
+    server_pem_key_path,
+    "",
+    "server-pem-key-path",
+    no_short,
+    "Path of pem-style server key for ssl.")
+
+MCROUTER_OPTION_STRING(
+    server_pem_ca_path,
+    MCROUTER_DEFAULT_CA_PATH,
+    "server-pem-ca-path",
+    no_short,
+    "Path of pem-style CA cert for ssl to verify clients against")
 
 MCROUTER_OPTION_INTEGER(
     int,
@@ -141,6 +175,23 @@ MCROUTER_OPTION_INTEGER(
     no_short,
     "How often to collect server load data. "
     "(0 to disable exposing server load)")
+
+MCROUTER_OPTION_INTEGER(
+    uint32_t,
+    tfo_queue_size,
+    100000,
+    "tfo-queue-size",
+    no_short,
+    "TFO queue size for SSL connections.  "
+    "(only matters if ssl tfo is enabled)")
+
+MCROUTER_OPTION_TOGGLE(
+    enable_pass_through_mode,
+    false,
+    "enable-pass-through-mode",
+    no_short,
+    "If enabled, mcrouter will avoid reserializing requests if the request"
+    " is not modified during routing.")
 
 #ifdef ADDITIONAL_STANDALONE_OPTIONS_FILE
 #include ADDITIONAL_STANDALONE_OPTIONS_FILE

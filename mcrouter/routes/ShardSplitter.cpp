@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ShardSplitter.h"
@@ -139,18 +137,22 @@ ShardSplitter::ShardSplitter(const folly::dynamic& json) {
   }
 }
 
+const ShardSplitter::ShardSplitInfo* FOLLY_NULLABLE
+ShardSplitter::getShardSplit(folly::StringPiece shard) const {
+  auto splitIt = shardSplits_.find(shard);
+  if (splitIt == shardSplits_.end()) {
+    return nullptr;
+  }
+  return &splitIt->second;
+}
+
 const ShardSplitter::ShardSplitInfo* ShardSplitter::getShardSplit(
     folly::StringPiece routingKey,
     folly::StringPiece& shard) const {
   if (!getShardId(routingKey, shard)) {
     return nullptr;
   }
-
-  auto splitIt = shardSplits_.find(shard);
-  if (splitIt == shardSplits_.end()) {
-    return nullptr;
-  }
-  return &splitIt->second;
+  return getShardSplit(shard);
 }
 
 } // mcrouter

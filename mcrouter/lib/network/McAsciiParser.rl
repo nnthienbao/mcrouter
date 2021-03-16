@@ -1,10 +1,8 @@
 /*
  *  Copyright (c) 2015, Facebook, Inc.
- *  All rights reserved.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "mcrouter/lib/network/McAsciiParser.h"
@@ -12,6 +10,7 @@
 #include "mcrouter/lib/mc/msg.h"
 #include "mcrouter/lib/McOperation.h"
 #include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/IOBufUtil.h"
 
 namespace facebook { namespace memcache {
 
@@ -409,10 +408,11 @@ transient = uint %{
   // We no longer support is_transient with typed requests.
 };
 
+#TODO(stuclar): Remove optional parsing of is_transient (T32090075) 
 meta = 'META' % { message.result() = mc_res_found; };
 mhit = meta ' '+ skip_key ' '+ 'age:' ' '* (age | age_unknown) ';' ' '*
-  'exptime:' ' '* exptime ';' ' '* 'from:' ' '* (ip_addr|'unknown') ';' ' '*
-  'is_transient:' ' '* transient ' '* new_line;
+  'exptime:' ' '* exptime ';' ' '* 'from:' ' '* (ip_addr|'unknown') (';' ' '*
+  'is_transient:' ' '* transient ' '*)? new_line;
 metaget = mhit? >{ message.result() = mc_res_notfound; } 'END' msg_end;
 metaget_reply := (metaget | error) msg_end;
 

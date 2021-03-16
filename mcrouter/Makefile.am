@@ -26,6 +26,8 @@ libmcroutercore_a_SOURCES = \
   CarbonRouterClient.h \
   CarbonRouterClientBase.cpp \
   CarbonRouterClientBase.h \
+  CarbonRouterFactory.h \
+  CarbonRouterFactory.cpp \
   CarbonRouterInstance-inl.h \
   CarbonRouterInstance.cpp \
   CarbonRouterInstance.h \
@@ -65,7 +67,6 @@ libmcroutercore_a_SOURCES = \
   PoolFactory.cpp \
   PoolFactory.h \
   Proxy-inl.h \
-  Proxy.cpp \
   Proxy.h \
   ProxyBase-inl.h \
   ProxyBase.cpp \
@@ -102,10 +103,12 @@ libmcroutercore_a_SOURCES = \
   routes/BigValueRoute.cpp \
   routes/BigValueRoute.h \
   routes/BigValueRouteIf.h \
+  routes/CarbonLookasideRoute.h \
+  routes/CarbonLookasideRoute.cpp \
   routes/DefaultShadowPolicy.h \
   routes/DestinationRoute.h \
   routes/DevNullRoute.h \
-  routes/ErrorRouteFactory.h \
+  routes/ErrorRoute.h \
   routes/ExtraRouteHandleProviderIf.h \
   routes/FailoverPolicy.h \
   routes/FailoverRateLimiter.cpp \
@@ -115,6 +118,8 @@ libmcroutercore_a_SOURCES = \
   routes/FailoverWithExptimeRouteFactory.h \
   routes/HostIdRouteFactory.h \
   routes/L1L2CacheRouteFactory.h \
+  routes/L1L2SizeSplitRoute.cpp \
+  routes/L1L2SizeSplitRoute.h \
   routes/LatestRoute.h \
   routes/McExtraRouteHandleProvider-inl.h \
   routes/McExtraRouteHandleProvider.h \
@@ -150,8 +155,13 @@ libmcroutercore_a_SOURCES = \
   routes/ShadowRoute.h \
   routes/ShadowRoute-inl.h \
   routes/ShadowRouteIf.h \
+  routes/ShadowSettings.cpp \
+  routes/ShadowSettings.h \
   routes/ShardHashFunc.cpp \
   routes/ShardHashFunc.h \
+  routes/ShardSelectionRouteFactory.h \
+  routes/ShardSelectionRouteFactory-inl.h \
+  routes/ShardSelectionRouteFactory.cpp \
   routes/ShardSplitRoute.cpp \
   routes/ShardSplitRoute.h \
   routes/ShardSplitter.cpp \
@@ -190,7 +200,7 @@ mcrouter_SOURCES = \
 
 libmcroutercore_a_CPPFLAGS = -I..
 
-mcrouter_LDADD = libmcroutercore.a lib/libmcrouter.a
+mcrouter_LDADD = libmcroutercore.a lib/libmcrouter.a -lwangle -lsodium -lfizz -lfolly
 mcrouter_CPPFLAGS = -I..
 
 clean-local:

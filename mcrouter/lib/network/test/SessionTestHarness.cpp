@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "SessionTestHarness.h"
@@ -135,7 +133,7 @@ class MockAsyncSocket : public folly::AsyncTransportWrapper {
 SessionTestHarness::NoopCallback SessionTestHarness::noopCb;
 
 SessionTestHarness::SessionTestHarness(
-    AsyncMcServerWorkerOptions opts,
+    const AsyncMcServerWorkerOptions& opts,
     McServerSession::StateCallback& cb)
     : session_(McServerSession::create(
           folly::AsyncTransportWrapper::UniquePtr(new MockAsyncSocket(*this)),
@@ -143,7 +141,7 @@ SessionTestHarness::SessionTestHarness(
               McServerOnRequestWrapper<MemcacheRequestHandler<OnRequest>>>(
               OnRequest(*this)),
           cb,
-          std::move(opts),
+          opts,
           nullptr)) {}
 
 void SessionTestHarness::inputPacket(folly::StringPiece p) {

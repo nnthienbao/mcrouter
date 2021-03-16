@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <memory>
@@ -37,7 +35,7 @@ void testDirectOp(ShardSplitter splitter) {
       DeleteRouteTestData(mc_res_found))};
   auto rh = get_route_handles(handles)[0];
   McrouterRouteHandle<ShardSplitRoute<McrouterRouterInfo>> splitRoute(
-      rh, splitter, true /* shouldAlwaysGoToMainSplitEnabled */);
+      rh, splitter);
 
   TestFiberManager fm{FiberManagerContextTag()};
   fm.run([&] {
@@ -88,7 +86,7 @@ TEST(shardSplitRoute, simpleSplit_deleteFanout) {
   auto rh = get_route_handles(handles)[0];
   ShardSplitter splitter(folly::dynamic::object("123", kNumSplits));
   McrouterRouteHandle<ShardSplitRoute<McrouterRouterInfo>> splitRoute(
-      rh, splitter, false /* shouldAlwaysGoToMainSplitEnabled */);
+      rh, splitter);
 
   TestFiberManager fm{FiberManagerContextTag()};
   fm.run([&] {

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -23,7 +21,9 @@
 #include "mcrouter/lib/RouteHandleTraverser.h"
 #include "mcrouter/lib/carbon/RoutingGroups.h"
 #include "mcrouter/lib/config/RouteHandleBuilder.h"
+#include "mcrouter/lib/config/RouteHandleProviderIf.h"
 #include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/routes/NullRoute.h"
 
 namespace facebook {
 namespace memcache {
@@ -50,6 +50,40 @@ typename std::enable_if<!Reply::hasValue, void>::type setReplyValue(
     Reply&,
     const std::string& /* val */) {}
 } // detail
+
+/**
+ * Very basic route handle provider to be used in unit tests only.
+ */
+template <class RouteHandleIf>
+class SimpleRouteHandleProvider : public RouteHandleProviderIf<RouteHandleIf> {
+ public:
+  std::vector<std::shared_ptr<RouteHandleIf>> create(
+      RouteHandleFactory<RouteHandleIf>& /* factory */,
+      folly::StringPiece type,
+      const folly::dynamic& json) override {
+    std::vector<std::shared_ptr<RouteHandleIf>> result;
+
+    const folly::dynamic* jsonPtr = nullptr;
+    if (type == "Pool") {
+      jsonPtr = json.get_ptr("servers");
+    } else {
+      jsonPtr = &json;
+    }
+
+    if (jsonPtr->isArray()) {
+      for (const auto& child : *jsonPtr) {
+        result.push_back(mcrouter::createNullRoute<RouteHandleIf>());
+      }
+    } else {
+      result.push_back(mcrouter::createNullRoute<RouteHandleIf>());
+    }
+    return result;
+  }
+
+  const folly::dynamic& parsePool(const folly::dynamic& json) override {
+    return json;
+  }
+};
 
 struct GetRouteTestData {
   mc_res_t result_;
@@ -96,6 +130,8 @@ struct TestHandleImpl {
   std::vector<std::string> sawOperations;
 
   std::vector<int64_t> sawLeaseTokensSet;
+
+  std::vector<std::string> sawShadowIds;
 
   bool isTko;
 
@@ -172,6 +208,13 @@ struct TestHandleImpl {
   }
 };
 
+template <class Request, class = std::string&>
+struct HasShadowId : public std::false_type {};
+
+template <class Request>
+struct HasShadowId<Request, decltype(std::declval<Request>().shadowId())>
+    : public std::true_type {};
+
 /* Records all the keys we saw */
 template <class RouteHandleIf>
 struct RecordingRoute {
@@ -208,6 +251,15 @@ struct RecordingRoute {
   }
 
   template <class Request>
+  std::enable_if_t<HasShadowId<Request>::value, void> recordShadowId(
+      const Request& req) {
+    h_->sawShadowIds.push_back(req.shadowId());
+  }
+  template <class Request>
+  std::enable_if_t<!HasShadowId<Request>::value, void> recordShadowId(
+      const Request&) {}
+
+  template <class Request>
   ReplyT<Request> routeInternal(const Request& req) {
     ReplyT<Request> reply;
 
@@ -222,6 +274,7 @@ struct RecordingRoute {
     h_->saw_keys.push_back(req.key().fullKey().str());
     h_->sawOperations.push_back(Request::name);
     h_->sawExptimes.push_back(req.exptime());
+    recordShadowId(req);
     if (carbon::GetLike<Request>::value) {
       reply.result() = dataGet_.result_;
       detail::setReplyValue(reply, dataGet_.value_);
@@ -229,10 +282,11 @@ struct RecordingRoute {
       return reply;
     }
     if (carbon::UpdateLike<Request>::value) {
-      assert(carbon::valuePtrUnsafe(req) != nullptr);
-      auto val = carbon::valuePtrUnsafe(req)->clone();
-      folly::StringPiece sp_value = coalesceAndGetRange(val);
-      h_->sawValues.push_back(sp_value.str());
+      if (carbon::valuePtrUnsafe(req) != nullptr) {
+        auto val = carbon::valuePtrUnsafe(req)->clone();
+        folly::StringPiece sp_value = coalesceAndGetRange(val);
+        h_->sawValues.push_back(sp_value.str());
+      }
       reply.result() = dataUpdate_.result_;
       detail::testSetFlags(reply, dataUpdate_.flags_);
       return reply;
